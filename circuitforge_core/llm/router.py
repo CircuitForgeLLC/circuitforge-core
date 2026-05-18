@@ -190,6 +190,14 @@ class LLMRouter:
         """
         If backend config has a cf_orch block and CF_ORCH_URL is set (env takes
         precedence over yaml url), allocate via cf-orch and return (ctx, alloc).
+
+        Two allocation modes:
+        - task-based (preferred): cf_orch block has `product` + `task` keys.
+          Calls POST /api/inference/task; coordinator resolves model/node from
+          assignments.yaml. No hardcoded model IDs in product config.
+        - service-based (legacy): cf_orch block has `service` key.
+          Calls allocate(service=...) directly.
+
         Returns None if not configured or allocation fails.
         Caller MUST call ctx.__exit__(None, None, None) in a finally block.
         """
@@ -205,16 +213,22 @@ class LLMRouter:
             from circuitforge_orch.client import CFOrchClient
 
             client = CFOrchClient(orch_url)
-            service = orch_cfg.get("service", "vllm")
-            candidates = orch_cfg.get("model_candidates", [])
             ttl_s = float(orch_cfg.get("ttl_s", 3600.0))
-            # CF_APP_NAME identifies the calling product (kiwi, peregrine, etc.)
-            # in coordinator analytics — set in each product's .env.
+
+            # Task-based allocation: product+task → coordinator resolves model/node.
+            task = orch_cfg.get("task")
+            product = orch_cfg.get("product") or os.environ.get("CF_APP_NAME") or None
+            if task and product:
+                ctx = client.task_allocate(product, task, ttl_s=ttl_s)
+                alloc = ctx.__enter__()
+                return (ctx, alloc)
+
+            # Service-based allocation (legacy path).
             cf_app = os.environ.get("CF_APP_NAME") or None
             caller = f"{cf_app}.llm-router" if cf_app else "llm-router"
             ctx = client.allocate(
-                service,
-                model_candidates=candidates,
+                orch_cfg.get("service", "vllm"),
+                model_candidates=orch_cfg.get("model_candidates", []),
                 ttl_s=ttl_s,
                 caller=caller,
                 pipeline=cf_app,
