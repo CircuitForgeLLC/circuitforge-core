@@ -66,6 +66,20 @@ musicgen-service = [
     "uvicorn[standard]>=0.29",
     "python-multipart>=0.0.9",
 ]
+video-marlin = [
+    "torch>=2.11",
+    "transformers>=5.7.0",
+    "torchcodec",
+    "qwen-vl-utils>=0.0.14",
+    "av",
+    "Pillow>=10.0",
+    "accelerate>=0.27",
+]
+video-service = [
+    "circuitforge-core[video-marlin]",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+]
 vision-siglip = [
     "torch>=2.0",
     "transformers>=4.40",
@@ -114,6 +128,18 @@ pdf = [
 ]
 vector = [
     "sqlite-vec>=0.1",
+]
+mqtt = [
+    "aiomqtt>=2.0",
+]
+meshtastic-serial = [
+    "meshtastic>=2.5",
+    "pypubsub>=4.0",
+]
+meshtastic-service = [
+    "circuitforge-core[mqtt,meshtastic-serial]",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
 ]
 dev = [
     "circuitforge-core[manage]",
