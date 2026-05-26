@@ -171,10 +171,12 @@ if __name__ == "__main__":
     )
     args = _parse_args()
 
-    # cf-orch sets CUDA_VISIBLE_DEVICES before spawning; only set it here when
-    # running the service manually (--gpu-id flag) without cf-orch.
+    # Pin GPU selection unconditionally — --gpu-id is authoritative.
+    # Force PCI_BUS_ID ordering so --gpu-id matches nvidia-smi (not CUDA's
+    # default FASTEST_FIRST, which can swap indices on multi-GPU nodes).
     if args.device == "cuda" and not args.mock:
-        os.environ.setdefault("CUDA_VISIBLE_DEVICES", str(args.gpu_id))
+        os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     mock = args.mock or args.model == "mock"
     device = "cpu" if mock else args.device
