@@ -180,3 +180,7 @@ Open issues and PRs at: [git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-
 MIT — see [LICENSE](LICENSE).
 
 This is the fully open layer of the CircuitForge stack. Products built on top of circuitforge-core may carry different licenses (BSL 1.1 for AI features, proprietary for fine-tuned weights). The scaffold itself is and will remain MIT.
+
+---
+
+Humans own design, architecture, code review, testing, and verification. LLMs are part of our development workflow. [Our positions on LLM use →](https://circuitforge.tech/positions)
