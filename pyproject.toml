@@ -69,6 +69,7 @@ musicgen-service = [
 video-marlin = [
     "torch>=2.11",
     "transformers>=5.7.0",
+    "torchvision",     # On CUDA 13 nodes install from PyTorch nightly: pip install --index-url https://download.pytorch.org/whl/nightly/cu130 torch torchvision
     "torchcodec",
     "qwen-vl-utils>=0.0.14",
     "av",
