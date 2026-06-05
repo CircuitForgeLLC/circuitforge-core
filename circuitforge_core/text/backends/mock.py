@@ -102,3 +102,49 @@ class MockTextBackend:
         # Format messages into a simple prompt for the mock response
         prompt = "\n".join(f"{m.role}: {m.content}" for m in messages)
         return self.generate(prompt, max_tokens=max_tokens, temperature=temperature)
+
+
+# Synthetic PII spans injected by MockClassifierBackend — predictable in tests.
+_MOCK_SPANS = [
+    {
+        "entity_group": "NAME",
+        "score": 0.99,
+        "word": "Jane Doe",
+        "start": 0,
+        "end": 8,
+    },
+    {
+        "entity_group": "EMAIL",
+        "score": 0.97,
+        "word": "jane@example.com",
+        "start": 18,
+        "end": 34,
+    },
+]
+
+
+class MockClassifierBackend:
+    """
+    Deterministic mock classifier backend for development and CI.
+
+    Always returns the same two synthetic PII spans regardless of input.
+    Allows filter.py logic (redaction, span conversion) to be tested without
+    a real model or GPU.
+    """
+
+    def __init__(self, model_name: str = "mock-classifier") -> None:
+        self._model_name = model_name
+
+    @property
+    def model_name(self) -> str:
+        return self._model_name
+
+    @property
+    def vram_mb(self) -> int:
+        return 0
+
+    def classify(self, text: str) -> list[dict]:
+        return list(_MOCK_SPANS)
+
+    async def classify_async(self, text: str) -> list[dict]:
+        return self.classify(text)
