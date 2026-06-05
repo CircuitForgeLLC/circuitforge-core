@@ -1,6 +1,5 @@
 # circuitforge_core/text/backends/classifier.py — HuggingFace token-classification backend
-#
-# BSL 1.1. Requires torch + transformers.
+# Requires torch + transformers.
 # Install: pip install circuitforge-core[text-transformers]
 #
 # Wraps pipeline("token-classification") for PII/entity detection.

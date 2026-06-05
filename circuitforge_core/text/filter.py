@@ -1,6 +1,5 @@
 # circuitforge_core/text/filter.py — PII detection and redaction
-#
-# BSL 1.1. Products import PIIFilter for pre-send redaction and audit trails.
+# Products import PIIFilter for pre-send redaction and audit trails.
 # Requires a running cf-filter service (or ClassifierBackend for in-process use).
 from __future__ import annotations
 
