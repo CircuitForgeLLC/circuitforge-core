@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/version-0.20.0-blue.svg" alt="v0.20.0" />
+  <img src="https://img.shields.io/badge/version-0.21.0-blue.svg" alt="v0.21.0" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+" />
   <a href="https://git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core"><img src="https://img.shields.io/badge/repo-Forgejo-orange.svg" alt="Forgejo" /></a>
 </p>
@@ -40,6 +40,10 @@ pip install circuitforge-core[text-transformers]    # Local transformer inferenc
 pip install circuitforge-core[stt-faster-whisper]   # Speech-to-text via Faster Whisper
 pip install circuitforge-core[tts-chatterbox]       # Text-to-speech via Chatterbox
 pip install circuitforge-core[reranker-qwen3]       # Reranking via Qwen3
+pip install circuitforge-core[video-service]        # Video captioning service (Marlin-2B)
+pip install circuitforge-core[mqtt]                 # MQTT broker client
+pip install circuitforge-core[meshtastic-service]   # Meshtastic mesh radio + MQTT + FastAPI
+pip install circuitforge-core[memory]               # Knowledge graph via mnemo sidecar
 pip install circuitforge-core[community]            # PostgreSQL-backed community store
 pip install circuitforge-core[manage]               # cf-manage CLI (Typer)
 pip install circuitforge-core[dev]                  # All dev dependencies
@@ -53,7 +57,7 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 |---|---|---|
 | `db` | Implemented | SQLite connection factory and migration runner |
 | `llm` | Implemented | LLM router with priority fallback chain (Ollama, vLLM, Anthropic, OpenAI-compatible) |
-| `tiers` | Implemented | Tier system with BYOK and local-vision unlocks (Free / Paid / Premium / Ultra) |
+| `tiers` | Implemented | Tier system with BYOK and local-vision unlocks (Free / Paid / Premium) |
 | `config` | Implemented | Env validation and `.env` loader with startup fail-fast |
 | `hardware` | Implemented | GPU/CPU detection, VRAM profiling, backend profile generation |
 | `documents` | Implemented | PDF, DOCX, and image OCR ingestion into `StructuredDocument` |
@@ -62,12 +66,14 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 | `tasks` | Implemented | VRAM-aware LLM task scheduler; shared slot manager across services |
 | `manage` | Implemented | Cross-platform product process manager (Docker and native modes) |
 | `resources` | Implemented | VRAM allocation, eviction engine, GPU profile registry |
-| `text` | Implemented | Text processing utilities and local transformer inference service |
+| `text` | Implemented | Text utilities (normalize, chunk, truncate) + local LLM inference service (GGUF/transformers/VLM/classifier backends, multimodal content-block API) |
 | `activitypub` | Implemented | ActivityPub actor, inbox, delivery, and Lemmy federation primitives |
 | `audio` | Implemented | Audio buffer, format conversion, resampling, and VAD (voice activity detection) gate |
 | `stt` | Implemented | Speech-to-text service (Faster Whisper backend) |
 | `tts` | Implemented | Text-to-speech service (Chatterbox backend) |
 | `musicgen` | Implemented | Music generation service (AudioCraft/MusicGen backend) |
+| `video` | Implemented | Video captioning and temporal grounding service (Marlin-2B backend) |
+| `mqtt` | Implemented | Async MQTT client and Meshtastic mesh radio integration (serial + MQTT broker backends) |
 | `reranker` | Implemented | Result reranking — BGE, Qwen3, cross-encoder, and Cohere adapters |
 | `vector` | Implemented | SQLite-vec vector store with pluggable embedding backend |
 | `api` | Implemented | Shared API helpers — corrections and feedback endpoints |
