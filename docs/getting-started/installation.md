@@ -5,7 +5,7 @@ circuitforge-core is distributed as an editable install from a local clone. It i
 ## Prerequisites
 
 - Python 3.11+
-- A conda environment (CircuitForge uses `cf` by convention; older envs may be named `job-seeker`)
+- A Python environment — conda or venv (see options below)
 - The `circuitforge-core` repo cloned alongside your product repo
 
 ## Typical layout
@@ -21,6 +21,10 @@ circuitforge-core is distributed as an editable install from a local clone. It i
 
 ## Install
 
+### Option A: conda (dev machines)
+
+The CircuitForge conda environment is named `cf`:
+
 ```bash
 # From inside a product repo, assuming circuitforge-core is a sibling
 conda run -n cf pip install -e ../circuitforge-core
@@ -30,13 +34,29 @@ conda activate cf
 pip install -e ../circuitforge-core
 ```
 
+### Option B: venv (server and beta-host deployments)
+
+For hosts that don't use conda (CI runners, beta VMs, Xander's orchard nodes):
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e /path/to/circuitforge-core
+```
+
+Or if cf-core is a sibling directory of the product:
+
+```bash
+pip install -e ../circuitforge-core
+```
+
 The editable install means changes to circuitforge-core source are reflected immediately in all products without reinstalling. Only restart the product's process after changes (or Docker container if running in Docker).
 
 ## Verify
 
 ```python
 import circuitforge_core
-print(circuitforge_core.__version__)  # 0.9.0
+print(circuitforge_core.__version__)  # e.g. 0.21.0
 ```
 
 ## Inside Docker

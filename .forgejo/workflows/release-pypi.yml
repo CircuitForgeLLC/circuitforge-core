@@ -1,4 +1,11 @@
-name: Release — PyPI
+name: Release — PyPI + Forgejo Packages
+
+# circuitforge-core is MIT — published to both public PyPI and the Circuit-Forge
+# Forgejo Packages index so cf-orch can resolve it from a single --extra-index-url.
+#
+# Required secrets:
+#   PYPI_API_TOKEN      — public PyPI upload token
+#   FORGEJO_PYPI_TOKEN  — Forgejo token with package:write scope
 
 on:
   push:
@@ -19,29 +26,36 @@ jobs:
 
       - name: Build
         run: |
-          pip install build
+          pip install build twine
           python -m build
 
-      - name: Publish to PyPI
+      - name: Publish to public PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
+      - name: Publish to Forgejo Packages
+        env:
+          TWINE_USERNAME: pypi-token
+          TWINE_PASSWORD: ${{ secrets.FORGEJO_PYPI_TOKEN }}
+          TWINE_REPOSITORY_URL: https://git.opensourcesolarpunk.com/api/packages/Circuit-Forge/pypi
+        run: twine upload dist/*
+
       - name: Create Forgejo release
         env:
-          FORGEJO_TOKEN: ${{ secrets.FORGEJO_RELEASE_TOKEN }}
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_PYPI_TOKEN }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          # Check if release already exists for this tag
           EXISTING=$(curl -sf \
             -H "Authorization: token ${FORGEJO_TOKEN}" \
             "https://git.opensourcesolarpunk.com/api/v1/repos/Circuit-Forge/circuitforge-core/releases/tags/${TAG}" \
-            2>/dev/null | jq -r '.id // empty')
-
+            2>/dev/null \
+            | python3 -c "import sys,json; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
           if [ -z "${EXISTING}" ]; then
-            jq -n --arg tag "${TAG}" \
-              '{"tag_name":$tag,"name":$tag,"draft":false,"prerelease":false}' \
-            | curl -sf -X POST \
+            python3 -c "
+          import json
+          print(json.dumps({'tag_name':'${TAG}','name':'${TAG}','draft':False,'prerelease':False}))
+          " | curl -sf -X POST \
                 -H "Authorization: token ${FORGEJO_TOKEN}" \
                 -H "Content-Type: application/json" \
                 "https://git.opensourcesolarpunk.com/api/v1/repos/Circuit-Forge/circuitforge-core/releases" \
