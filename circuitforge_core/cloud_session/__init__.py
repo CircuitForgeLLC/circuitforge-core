@@ -39,6 +39,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
+try:
+    from starlette.requests import Request as _Request
+    from starlette.responses import Response as _Response
+except ImportError:  # pragma: no cover — starlette may be absent in non-web envs
+    _Request = Any  # type: ignore[assignment,misc]
+    _Response = Any  # type: ignore[assignment,misc]
+
 log = logging.getLogger(__name__)
 
 TIERS: list[str] = ["free", "paid", "premium", "ultra"]
@@ -248,22 +255,40 @@ class CloudSessionFactory:
             request.headers.get("x-real-ip", "")
             or (request.client.host if request.client else "")
         )
-        if _is_bypass_ip(client_ip, self._bypass_nets, self._bypass_ips):
-            log.debug("Bypass IP %s — returning local-dev session for product %s", client_ip, self.product)
-            return CloudUser(user_id="local-dev", tier="local", product=self.product, has_byok=has_byok)
+        is_bypass = _is_bypass_ip(client_ip, self._bypass_nets, self._bypass_ips)
 
         raw_session = (
             request.headers.get("x-cf-session", "").strip()
             or request.cookies.get("cf_session", "").strip()
         )
+
+        # Bypass IPs skip the JWT *requirement* but not JWT *validation*.
+        # If a token is present (dev is logged in), honour it so they land on
+        # their own account DB rather than the shared local-dev DB.
         if not raw_session:
+            if is_bypass:
+                log.debug("Bypass IP %s, no token — returning local-dev session for product %s", client_ip, self.product)
+                return CloudUser(user_id="local-dev", tier="local", product=self.product, has_byok=has_byok)
             return self._resolve_guest(request, response)
 
         token = _extract_session_token(raw_session)
         if not token:
             return self._resolve_guest(request, response)
 
-        user_id = self.validate_jwt(token)
+        # Soft-fail on invalid/expired JWT: downgrade to guest rather than
+        # hard-erroring with 401.  Public endpoints (e.g. community blocklist)
+        # should remain accessible even when the browser has a stale cookie.
+        # Routes that genuinely require an authenticated identity should gate
+        # themselves with require_tier() — that's where the 401/403 belongs.
+        try:
+            user_id = self.validate_jwt(token)
+        except Exception:
+            log.warning(
+                "JWT validation failed for product %s (expired or tampered) — falling back to guest",
+                self.product,
+            )
+            return self._resolve_guest(request, response)
+
         self._ensure_provisioned(user_id)
         tier_data = self._resolve_tier(user_id)
         tier = tier_data.get("tier", "free")
@@ -283,11 +308,11 @@ class CloudSessionFactory:
             meta=meta,
         )
 
-    def dependency(self) -> Callable[[Any, Any], CloudUser]:
+    def dependency(self) -> Callable[["_Request", "_Response"], CloudUser]:
         """Return a FastAPI-compatible dependency function (use with Depends())."""
         factory = self
 
-        def _get_session(request: Any, response: Any) -> CloudUser:
+        def _get_session(request: _Request, response: _Response) -> CloudUser:
             return factory.resolve(request, response)
 
         return _get_session

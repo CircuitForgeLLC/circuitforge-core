@@ -50,10 +50,12 @@ class TransformersBackend:
         logger.info("Loading transformers model %s on %s", model_path, self._device)
 
         load_kwargs: dict = {"device_map": "auto" if self._device == "cuda" else None}
-        if _LOAD_IN_4BIT:
-            load_kwargs["load_in_4bit"] = True
-        elif _LOAD_IN_8BIT:
-            load_kwargs["load_in_8bit"] = True
+        if _LOAD_IN_4BIT or _LOAD_IN_8BIT:
+            from transformers import BitsAndBytesConfig
+            load_kwargs["quantization_config"] = BitsAndBytesConfig(
+                load_in_4bit=_LOAD_IN_4BIT,
+                load_in_8bit=_LOAD_IN_8BIT,
+            )
 
         self._tokenizer = AutoTokenizer.from_pretrained(model_path)
         self._model = AutoModelForCausalLM.from_pretrained(model_path, **load_kwargs)

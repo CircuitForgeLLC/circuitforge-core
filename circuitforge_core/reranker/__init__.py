@@ -51,8 +51,11 @@ cf-orch service profile (Phase 3 — remote backend):
 """
 from __future__ import annotations
 
+import logging
 import os
 from typing import Sequence
+
+logger = logging.getLogger(__name__)
 
 from circuitforge_core.reranker.base import RerankResult, Reranker, TextReranker
 from circuitforge_core.reranker.adapters.mock import MockTextReranker

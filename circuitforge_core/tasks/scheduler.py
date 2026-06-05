@@ -169,7 +169,15 @@ class LocalScheduler:
                     if not q:
                         break
                     task = q.popleft()
-                self._run_task(self._db_path, task.id, task_type, task.job_id, task.params)
+                try:
+                    self._run_task(self._db_path, task.id, task_type, task.job_id, task.params)
+                except Exception as exc:
+                    # run_task_fn should handle its own exceptions. If it leaks one,
+                    # log it so the task doesn't silently stay 'queued' with no trace.
+                    logger.exception(
+                        "Unhandled exception in batch worker task %d (%s): %s",
+                        task.id, task_type, exc,
+                    )
         finally:
             with self._lock:
                 self._active.pop(task_type, None)

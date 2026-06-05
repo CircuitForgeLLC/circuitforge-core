@@ -1,4 +1,9 @@
-__version__ = "0.18.0"
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("circuitforge-core")
+except PackageNotFoundError:
+    __version__ = "dev"  # running from source without an editable install
 
 try:
     from circuitforge_core.community import CommunityDB, CommunityPost, SharedStore
