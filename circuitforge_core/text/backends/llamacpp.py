@@ -48,7 +48,16 @@ class LlamaCppBackend:
     Requires: pip install circuitforge-core[text-llamacpp]
     """
 
-    def __init__(self, model_path: str) -> None:
+    def __init__(self, model_path: str, mmproj_path: str = "", chat_format: str = "") -> None:
+        """Load a GGUF model.
+
+        ``mmproj_path``: path to a separate multimodal projector file (needed
+        for LLaVA-style VLMs where the visual encoder is a separate .gguf).
+        Qwen2-VL and similar models with an embedded projector don't need this.
+
+        ``chat_format``: llama-cpp chat template override (e.g. "llava-1-5",
+        "moondream").  Required when mmproj_path is set.
+        """
         try:
             from llama_cpp import Llama  # type: ignore[import]
         except ImportError as exc:
@@ -63,20 +72,53 @@ class LlamaCppBackend:
                 "Download a GGUF model and set CF_TEXT_MODEL to its path."
             )
 
+        # If given a directory, find the .gguf file inside it.
+        if Path(model_path).is_dir():
+            candidates = sorted(Path(model_path).glob("*.gguf")) or sorted(Path(model_path).glob("*.GGUF"))
+            if not candidates:
+                raise FileNotFoundError(
+                    f"No .gguf file found in directory: {model_path}"
+                )
+            model_path = str(candidates[0])
+
         n_threads = int(os.environ.get("CF_TEXT_THREADS", "0")) or None
-        logger.info(
-            "Loading GGUF model %s (ctx=%d, gpu_layers=%d)",
-            model_path, _DEFAULT_N_CTX, _DEFAULT_N_GPU_LAYERS,
-        )
-        self._llm = Llama(
+
+        kwargs: dict = dict(
             model_path=model_path,
             n_ctx=_DEFAULT_N_CTX,
             n_gpu_layers=_DEFAULT_N_GPU_LAYERS,
             n_threads=n_threads,
             verbose=False,
         )
+        if mmproj_path:
+            kwargs["clip_model_path"] = mmproj_path
+            kwargs["chat_format"] = chat_format or "llava-1-5"
+            logger.info(
+                "Loading VLM %s with mmproj %s (ctx=%d, gpu_layers=%d)",
+                model_path, mmproj_path, _DEFAULT_N_CTX, _DEFAULT_N_GPU_LAYERS,
+            )
+        else:
+            logger.info(
+                "Loading GGUF model %s (ctx=%d, gpu_layers=%d)",
+                model_path, _DEFAULT_N_CTX, _DEFAULT_N_GPU_LAYERS,
+            )
+
+        self._llm = Llama(**kwargs)
         self._model_path = model_path
         self._vram_mb = _estimate_vram_mb(model_path)
+        # True when the model was initialised with a visual encoder (explicit
+        # mmproj) or when it is a known self-contained VLM (Qwen2-VL, etc.).
+        self._is_vlm = bool(mmproj_path) or self._detect_embedded_vlm()
+
+    def _detect_embedded_vlm(self) -> bool:
+        """Heuristic: check model metadata for a known multimodal architecture."""
+        try:
+            meta = self._llm.metadata or {}
+            arch = str(meta.get("general.architecture", "")).lower()
+            # Qwen2-VL and similar embed the vision encoder inside the GGUF.
+            return any(tag in arch for tag in ("qwen2_vl", "llava", "moondream", "minicpm-v"))
+        except Exception:
+            return False
 
     @property
     def model_name(self) -> str:
@@ -181,7 +223,14 @@ class LlamaCppBackend:
         max_tokens: int = 512,
         temperature: float = 0.7,
     ) -> GenerateResult:
-        # llama-cpp-python has native chat_completion for instruct models
+        # Detect image content before calling the model.
+        if any(m.has_images for m in messages) and not self._is_vlm:
+            raise ValueError(
+                "model does not support image input — "
+                "load a VLM (with mmproj_path) or route to cf-vision/cf-docuvision"
+            )
+        # llama-cpp-python create_chat_completion accepts content as str or
+        # list-of-blocks (OpenAI multimodal format) natively.
         output = self._llm.create_chat_completion(
             messages=[m.to_dict() for m in messages],
             max_tokens=max_tokens,

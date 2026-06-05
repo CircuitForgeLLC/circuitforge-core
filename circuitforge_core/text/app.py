@@ -1,14 +1,15 @@
 """
 cf-text FastAPI service — managed by cf-orch.
 
-Lightweight local text generation. Supports GGUF models via llama.cpp and
-HuggingFace transformers. Sits alongside vllm/ollama for products that need
-fast, frequent inference from small local models (3B–7B Q4).
+Lightweight local text generation and PII filtering. Supports GGUF models via
+llama.cpp, HuggingFace transformers, and token-classification models (classifier
+backend) for PII detection and redaction.
 
 Endpoints:
   GET  /health      → {"status": "ok", "model": str, "vram_mb": int, "backend": str}
-  POST /generate    → GenerateResponse
-  POST /chat        → GenerateResponse
+  POST /generate    → GenerateResponse          (text-gen backends only)
+  POST /chat        → GenerateResponse          (text-gen backends only)
+  POST /filter      → FilterResponse            (classifier backend only)
 
 Usage:
     python -m circuitforge_core.text.app \
@@ -34,17 +35,46 @@ import os
 import time
 import uuid
 from functools import partial
+from typing import Annotated, Literal, Union
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from circuitforge_core.text.backends.base import ChatMessage as BackendChatMessage
-from circuitforge_core.text.backends.base import make_text_backend
+from circuitforge_core.text.backends.base import make_classifier_backend, make_text_backend
+from circuitforge_core.text.filter import FilterResult, PIIFilter
 
 logger = logging.getLogger(__name__)
 
 _backend = None
+_pii_filter: PIIFilter | None = None
+
+
+# ── Content block types (OpenAI multimodal format) ────────────────────────────
+
+
+class ContentBlockText(BaseModel):
+    type: Literal["text"]
+    text: str
+
+
+class ContentBlockImageURL(BaseModel):
+    type: Literal["image_url"]
+    image_url: dict[str, str]
+
+
+ContentBlock = Annotated[
+    Union[ContentBlockText, ContentBlockImageURL],
+    Field(discriminator="type"),
+]
+
+
+def _to_backend_message(role: str, content: "str | list[ContentBlock]") -> "BackendChatMessage":
+    """Convert an API message to a BackendChatMessage with raw content dicts."""
+    if isinstance(content, str):
+        return BackendChatMessage(role, content)
+    return BackendChatMessage(role, [b.model_dump() for b in content])
 
 
 # ── Request / response models ─────────────────────────────────────────────────
@@ -59,7 +89,7 @@ class GenerateRequest(BaseModel):
 
 class ChatMessageModel(BaseModel):
     role: str
-    content: str
+    content: Union[str, list[ContentBlock]] = ""
 
 
 class ChatRequest(BaseModel):
@@ -74,12 +104,31 @@ class GenerateResponse(BaseModel):
     model: str = ""
 
 
+class FilterRequest(BaseModel):
+    text: str
+
+
+class PIISpanResponse(BaseModel):
+    label: str
+    start: int
+    end: int
+    text: str
+    score: float
+
+
+class FilterResponse(BaseModel):
+    redacted_text: str
+    spans: list[PIISpanResponse]
+    original_text: str
+    model: str = ""
+
+
 # ── OpenAI-compat request / response (for LLMRouter openai_compat path) ──────
 
 
 class OAIMessageModel(BaseModel):
     role: str
-    content: str
+    content: Union[str, list[ContentBlock]] = ""
 
 
 class OAIChatRequest(BaseModel):
@@ -120,6 +169,7 @@ def create_app(
     gpu_ids: str | None = None,
     backend: str | None = None,
     mock: bool = False,
+    mmproj_path: str = "",
 ) -> FastAPI:
     """Start the cf-text FastAPI app.
 
@@ -127,8 +177,12 @@ def create_app(
     (e.g. "0,1"). When set, overrides ``gpu_id`` and sets
     ``CUDA_VISIBLE_DEVICES`` to the full list so HuggingFace Accelerate's
     ``device_map="auto"`` can shard the model across all listed devices.
+
+    When ``backend="classifier"``, the service skips the text-gen backends
+    and loads a token-classification pipeline instead. Only ``POST /filter``
+    is available in that mode; ``/generate`` and ``/chat`` return 501.
     """
-    global _backend
+    global _backend, _pii_filter
 
     if not mock and not model_path:
         raise ValueError(
@@ -139,13 +193,26 @@ def create_app(
     visible = gpu_ids if gpu_ids else str(gpu_id)
     os.environ.setdefault("CUDA_VISIBLE_DEVICES", visible)
 
-    _backend = make_text_backend(model_path, backend=backend, mock=mock)
-    logger.info("cf-text ready: model=%r vram=%dMB", _backend.model_name, _backend.vram_mb)
+    resolved_backend = backend or os.environ.get("CF_TEXT_BACKEND", "")
+    if resolved_backend == "classifier" or (not resolved_backend and False):
+        classifier_backend = make_classifier_backend(model_path)
+        _pii_filter = PIIFilter.from_backend(classifier_backend)
+        logger.info(
+            "cf-text (classifier) ready: model=%r vram=%dMB",
+            classifier_backend.model_name,
+            classifier_backend.vram_mb,
+        )
+    else:
+        _backend = make_text_backend(model_path, backend=backend, mock=mock, mmproj_path=mmproj_path)
+        logger.info("cf-text ready: model=%r vram=%dMB", _backend.model_name, _backend.vram_mb)
 
     app = FastAPI(title="cf-text", version="0.1.0")
 
     @app.get("/health")
     def health() -> dict:
+        if _pii_filter is not None:
+            b = _pii_filter._backend
+            return {"status": "ok", "model": b.model_name, "vram_mb": b.vram_mb, "backend": "classifier"}
         if _backend is None:
             raise HTTPException(503, detail="backend not initialised")
         return {
@@ -154,8 +221,35 @@ def create_app(
             "vram_mb": _backend.vram_mb,
         }
 
+    @app.post("/filter")
+    async def filter_text(req: FilterRequest) -> FilterResponse:
+        if _pii_filter is None:
+            raise HTTPException(
+                501,
+                detail="This cf-text instance is not running a classifier backend. "
+                       "Start with --backend classifier and a token-classification model.",
+            )
+        result = await _pii_filter.filter_async(req.text)
+        return FilterResponse(
+            redacted_text=result.redacted_text,
+            spans=[
+                PIISpanResponse(
+                    label=s.label,
+                    start=s.start,
+                    end=s.end,
+                    text=s.text,
+                    score=s.score,
+                )
+                for s in result.spans
+            ],
+            original_text=result.original_text,
+            model=_pii_filter._backend.model_name,
+        )
+
     @app.post("/generate")
     async def generate(req: GenerateRequest) -> GenerateResponse:
+        if _pii_filter is not None:
+            raise HTTPException(501, detail="classifier backend loaded — use POST /filter")
         if _backend is None:
             raise HTTPException(503, detail="backend not initialised")
         result = await _backend.generate_async(
@@ -172,16 +266,20 @@ def create_app(
 
     @app.post("/chat")
     async def chat(req: ChatRequest) -> GenerateResponse:
+        if _pii_filter is not None:
+            raise HTTPException(501, detail="classifier backend loaded — use POST /filter")
         if _backend is None:
             raise HTTPException(503, detail="backend not initialised")
-        messages = [BackendChatMessage(m.role, m.content) for m in req.messages]
-        # chat() is sync-only in the Protocol; run in thread pool to avoid blocking
+        messages = [_to_backend_message(m.role, m.content) for m in req.messages]
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            partial(_backend.chat, messages,
-                    max_tokens=req.max_tokens, temperature=req.temperature),
-        )
+        try:
+            result = await loop.run_in_executor(
+                None,
+                partial(_backend.chat, messages,
+                        max_tokens=req.max_tokens, temperature=req.temperature),
+            )
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
         return GenerateResponse(
             text=result.text,
             tokens_used=result.tokens_used,
@@ -198,13 +296,16 @@ def create_app(
         """
         if _backend is None:
             raise HTTPException(503, detail="backend not initialised")
-        messages = [BackendChatMessage(m.role, m.content) for m in req.messages]
+        messages = [_to_backend_message(m.role, m.content) for m in req.messages]
         max_tok = req.max_tokens or 512
         loop = asyncio.get_event_loop()
-        result = await loop.run_in_executor(
-            None,
-            partial(_backend.chat, messages, max_tokens=max_tok, temperature=req.temperature),
-        )
+        try:
+            result = await loop.run_in_executor(
+                None,
+                partial(_backend.chat, messages, max_tokens=max_tok, temperature=req.temperature),
+            )
+        except ValueError as exc:
+            raise HTTPException(422, detail=str(exc)) from exc
         return OAIChatResponse(
             id=f"cftext-{uuid.uuid4().hex[:12]}",
             created=int(time.time()),
@@ -230,7 +331,16 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--gpu-ids", default=None,
                         help="Comma-separated CUDA device indices for multi-GPU spanning "
                              "(e.g. '0,1'). Overrides --gpu-id when set.")
-    parser.add_argument("--backend", choices=["llamacpp", "transformers"], default=None)
+    parser.add_argument(
+        "--backend",
+        choices=["llamacpp", "transformers", "ollama", "vllm", "classifier"],
+        default=None,
+    )
+    parser.add_argument(
+        "--mmproj", default="",
+        help="Path to multimodal projector file for VLM GGUF models (LLaVA-style). "
+             "Qwen2-VL and other self-contained VLMs don't need this.",
+    )
     parser.add_argument("--mock", action="store_true",
                         help="Run in mock mode (no model or GPU needed)")
     return parser.parse_args()
@@ -247,5 +357,6 @@ if __name__ == "__main__":
         gpu_ids=args.gpu_ids,
         backend=args.backend,
         mock=mock,
+        mmproj_path=args.mmproj,
     )
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")

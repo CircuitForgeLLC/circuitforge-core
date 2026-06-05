@@ -24,16 +24,43 @@ class GenerateResult:
 
 
 class ChatMessage:
-    """A single message in a chat conversation."""
+    """A single message in a chat conversation.
 
-    def __init__(self, role: str, content: str) -> None:
+    ``content`` is either a plain string or a list of OpenAI-format content
+    blocks (dicts with ``type: "text"`` or ``type: "image_url"``).  Backends
+    that do not support images should call ``text_only`` to get the string
+    form before passing to the model.
+    """
+
+    def __init__(self, role: str, content: "str | list") -> None:
         if role not in ("system", "user", "assistant"):
             raise ValueError(f"Invalid role {role!r}. Must be system, user, or assistant.")
         self.role = role
-        self.content = content
+        self.content: "str | list" = content
 
     def to_dict(self) -> dict:
         return {"role": self.role, "content": self.content}
+
+    @property
+    def has_images(self) -> bool:
+        """True when at least one content block is an image_url block."""
+        if isinstance(self.content, str):
+            return False
+        return any(
+            isinstance(b, dict) and b.get("type") == "image_url"
+            for b in self.content
+        )
+
+    @property
+    def text_only(self) -> str:
+        """Flatten multimodal content to text. Returns content as-is if already str."""
+        if isinstance(self.content, str):
+            return self.content
+        return "\n".join(
+            b["text"]
+            for b in self.content
+            if isinstance(b, dict) and b.get("type") == "text"
+        )
 
 
 # ── TextBackend Protocol ──────────────────────────────────────────────────────
@@ -116,6 +143,33 @@ class TextBackend(Protocol):
         ...
 
 
+# ── FilterBackend Protocol ────────────────────────────────────────────────────
+
+
+@runtime_checkable
+class FilterBackend(Protocol):
+    """
+    Abstract interface for token-classification / PII-filter backends.
+
+    Separate from TextBackend — returns entity spans and redacted text,
+    not generated text.
+    """
+
+    def classify(self, text: str) -> list[dict]:
+        """Synchronous classify — returns list of entity span dicts."""
+        ...
+
+    async def classify_async(self, text: str) -> list[dict]:
+        """Async classify — runs in thread pool."""
+        ...
+
+    @property
+    def model_name(self) -> str: ...
+
+    @property
+    def vram_mb(self) -> int: ...
+
+
 # ── Backend selection ─────────────────────────────────────────────────────────
 
 
@@ -133,7 +187,7 @@ def _select_backend(model_path: str, backend: str | None) -> str:
 
     Raise ValueError for unrecognised override values.
     """
-    _VALID = ("llamacpp", "transformers", "ollama", "vllm")
+    _VALID = ("llamacpp", "transformers", "ollama", "vllm", "classifier")
 
     # 1. Caller-supplied override — highest trust, no inspection needed.
     resolved = backend or os.environ.get("CF_TEXT_BACKEND")
@@ -153,6 +207,11 @@ def _select_backend(model_path: str, backend: str | None) -> str:
     # 3. Format detection — GGUF files are unambiguously llama-cpp territory.
     if model_path.lower().endswith(".gguf"):
         return "llamacpp"
+    # 3b. GGUF directory — avocet downloads whole repos; scan for .gguf contents.
+    if os.path.isdir(model_path):
+        import glob as _glob
+        if _glob.glob(os.path.join(model_path, "*.gguf")) or _glob.glob(os.path.join(model_path, "*.GGUF")):
+            return "llamacpp"
 
     # 4. Safe default — transformers covers HF repo IDs and safetensors dirs.
     return "transformers"
@@ -165,6 +224,7 @@ def make_text_backend(
     model_path: str,
     backend: str | None = None,
     mock: bool | None = None,
+    mmproj_path: str = "",
 ) -> "TextBackend":
     """
     Return a TextBackend for the given model.
@@ -181,7 +241,7 @@ def make_text_backend(
 
     if resolved == "llamacpp":
         from circuitforge_core.text.backends.llamacpp import LlamaCppBackend
-        return LlamaCppBackend(model_path=model_path)
+        return LlamaCppBackend(model_path=model_path, mmproj_path=mmproj_path)
 
     if resolved == "transformers":
         from circuitforge_core.text.backends.transformers import TransformersBackend
@@ -195,4 +255,22 @@ def make_text_backend(
         from circuitforge_core.text.backends.vllm import VllmBackend
         return VllmBackend(model_path=model_path)
 
-    raise ValueError(f"Unknown backend {resolved!r}. Expected 'llamacpp', 'transformers', 'ollama', or 'vllm'.")
+    raise ValueError(
+        f"Unknown backend {resolved!r}. "
+        "Expected 'llamacpp', 'transformers', 'ollama', 'vllm', or 'classifier'."
+    )
+
+
+def make_classifier_backend(model_path: str) -> "FilterBackend":
+    """
+    Return a FilterBackend for the given token-classification model.
+
+    CF_TEXT_MOCK=1  → MockClassifierBackend (no GPU, no model file needed)
+    Otherwise       → ClassifierBackend via transformers pipeline
+    """
+    if os.environ.get("CF_TEXT_MOCK", "") == "1":
+        from circuitforge_core.text.backends.mock import MockClassifierBackend
+        return MockClassifierBackend(model_name=model_path)
+
+    from circuitforge_core.text.backends.classifier import ClassifierBackend
+    return ClassifierBackend(model_path=model_path)
