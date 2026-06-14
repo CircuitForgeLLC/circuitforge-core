@@ -17,6 +17,9 @@ dependencies = [
 memory = [
     "mnemo-sdk>=0.1.0",
 ]
+sync = [
+    "fastapi>=0.110",
+]
 community = [
     "psycopg2>=2.9",
 ]
@@ -164,6 +167,7 @@ include = ["circuitforge_core*"]
 
 [tool.setuptools.package-data]
 "circuitforge_core.community.migrations" = ["*.sql"]
+"circuitforge_core.sync.migrations" = ["*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

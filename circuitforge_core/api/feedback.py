@@ -46,9 +46,13 @@ class FeedbackResponse(BaseModel):
     issue_url: str
 
 
+def _forgejo_token() -> str:
+    """Return the bot token when set; fall back to the personal API token."""
+    return os.environ.get("FORGEJO_BOT_TOKEN") or os.environ.get("FORGEJO_API_TOKEN", "")
+
+
 def _forgejo_headers() -> dict[str, str]:
-    token = os.environ.get("FORGEJO_API_TOKEN", "")
-    return {"Authorization": f"token {token}", "Content-Type": "application/json"}
+    return {"Authorization": f"token {_forgejo_token()}", "Content-Type": "application/json"}
 
 
 def _ensure_labels(label_names: list[str], base: str, repo: str) -> list[int]:
@@ -137,16 +141,16 @@ def make_feedback_router(
     @router.get("/status")
     def feedback_status() -> dict:
         """Return whether feedback submission is configured on this instance."""
-        return {"enabled": bool(os.environ.get("FORGEJO_API_TOKEN")) and not _is_demo()}
+        return {"enabled": bool(_forgejo_token()) and not _is_demo()}
 
     @router.post("", response_model=FeedbackResponse)
     def submit_feedback(payload: FeedbackRequest) -> FeedbackResponse:
         """File a Forgejo issue from in-app feedback."""
-        token = os.environ.get("FORGEJO_API_TOKEN", "")
+        token = _forgejo_token()
         if not token:
             raise HTTPException(
                 status_code=503,
-                detail="Feedback disabled: FORGEJO_API_TOKEN not configured.",
+                detail="Feedback disabled: FORGEJO_BOT_TOKEN (or FORGEJO_API_TOKEN) not configured.",
             )
         if _is_demo():
             raise HTTPException(status_code=403, detail="Feedback disabled in demo mode.")
