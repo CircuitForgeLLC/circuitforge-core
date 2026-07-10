@@ -6,6 +6,26 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.22.0] — 2026-07-10
+
+### Added
+
+**`circuitforge_core.signal_bus`** — generic SSE event publisher for real-time signal streams (MIT, closes #58)
+
+- `SignalBus` — publish/subscribe bus for real-time events over Server-Sent Events. One instance per service; `publish()` is thread-safe (safe to call from sync producer threads such as OpenCV, Meshtastic, or PyPubSub callbacks) via `loop.call_soon_threadsafe()`. `subscribe(request)` returns a FastAPI `StreamingResponse` — each subscriber gets an independent bounded `asyncio.Queue` (default 100 events) with oldest-drop-on-overflow, plus a 15s keepalive comment to keep proxies from closing idle connections.
+- `SignalEvent` — frozen dataclass (`source`, `kind`, `payload`, auto-populated ISO-8601 UTC `timestamp`) with `to_sse()` wire-format serialization.
+- New `signal-bus` extra (`fastapi>=0.110`).
+
+**`circuitforge_core.video.app`** — `POST /caption/upload` endpoint
+
+Accepts a multipart video file upload, writes it to a temp file, captions it via the configured backend, then deletes the temp file. Lets callers without filesystem access to the video-service node (e.g. a product on one host posting to cf-video on another over an SSH tunnel) caption a video without a shared mount. `video-service` extra now also pulls in `python-multipart`, required by FastAPI's `UploadFile` parsing.
+
+### Docs
+
+- `mkdocs.yml` — new blue-grey/cyan palette, wired to a central `docs/stylesheets/theme.css` for consistent theme-aware styling across the site (light and dark mode).
+
+---
+
 ## [0.20.0] — 2026-05-05
 
 ### Fixed / Enhanced

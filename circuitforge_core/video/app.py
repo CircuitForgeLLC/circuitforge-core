@@ -32,7 +32,10 @@ import logging
 import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+import shutil
+import tempfile
+
+from fastapi import FastAPI, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from circuitforge_core.video.backends.base import VideoBackend, make_video_backend
@@ -135,6 +138,46 @@ def find(req: FindRequest) -> FindResponse:
         span=list(result.span) if result.span is not None else None,
         format_ok=result.format_ok,
         raw=result.raw,
+        model=result.model,
+    )
+
+
+@app.post("/caption/upload", response_model=CaptionResponse)
+async def caption_upload(
+    file: UploadFile,
+    max_new_tokens: int = 2048,
+) -> CaptionResponse:
+    """Accept a video file upload, caption it, then delete the temp file.
+
+    Allows callers that don't share a filesystem with this node (e.g. Waxwing
+    on Heimdall posting to cf-video on Muninn via the SSH tunnel port forward).
+    """
+    if _backend is None:
+        raise HTTPException(503, detail="backend not initialised")
+
+    suffix = f".{file.filename.rsplit('.', 1)[-1]}" if file.filename and "." in file.filename else ".mkv"
+    tmp_fd, tmp_path = tempfile.mkstemp(suffix=suffix)
+    try:
+        with os.fdopen(tmp_fd, "wb") as dst:
+            shutil.copyfileobj(file.file, dst)
+
+        result = _backend.caption(tmp_path, max_new_tokens=max_new_tokens)
+    except Exception as exc:
+        logging.exception("caption/upload failed")
+        raise HTTPException(500, detail=str(exc)) from exc
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    return CaptionResponse(
+        scene=result.scene,
+        events=[
+            VideoEventOut(start=ev.start, end=ev.end, description=ev.description)
+            for ev in result.events
+        ],
+        caption=result.caption,
         model=result.model,
     )
 
