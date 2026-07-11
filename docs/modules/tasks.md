@@ -76,3 +76,22 @@ def get_scheduler():
 ```
 
 Always re-export `reset_scheduler` from the shim so the FastAPI lifespan can import it from one place.
+
+## Generic caller/args dispatch
+
+Separate from the VRAM-budgeted scheduler above: `dispatch_task()`/`get_task_status()` are a generic, product-agnostic pair for running a named callable in the background and polling its status, keyed by a `"product/task_name"` string rather than the scheduler's `task_id`/`job_id`/SQLite-table shape.
+
+```python
+from circuitforge_core.tasks import register_task_runner, dispatch_task, get_task_status
+
+# Once, at product startup:
+register_task_runner("pagepiper/ingest_pdf", run_ingest_pdf)
+
+# Anywhere a task needs dispatching:
+task_id = dispatch_task("pagepiper/ingest_pdf", {"doc_id": "...", "file_path": "..."})
+get_task_status(task_id)  # {"status": "running", "progress": 0, "error": None}
+```
+
+Free-tier, in-process, single-node — runs on a background thread pool, no cross-node distribution. `dispatch_task()` raises `LookupError` for an unregistered `caller`, so products with an `except Exception: ...` fallback to local execution keep working unchanged if they forget to register a runner.
+
+`register_task_runner`/`dispatch_task`/`get_task_status` route through `circuitforge_core.tasks.dispatch` internally — nothing shared with `scheduler.py`'s VRAM-aware queue.

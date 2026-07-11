@@ -6,6 +6,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.22.0] — 2026-07-10
+
+### Added
+
+**`circuitforge_core.tasks.dispatch_task` / `get_task_status`** — generic caller/args task dispatch (closes #67)
+
+Pagepiper (and potentially other products copying its pattern) imported `dispatch_task(caller, args) -> task_id` / `get_task_status(task_id) -> dict` from `circuitforge_core.tasks`, expecting a `"product/task_name"` + kwargs-dict interface — neither function existed anywhere, so every call silently hit an `except Exception` fallback to local `BackgroundTasks`, with no visible error. This is a different API shape from the existing VRAM-budgeted `TaskScheduler` (keyed by `task_id`/`job_id`/`params` against a specific SQLite `background_tasks` table), so it's a new module rather than a `TaskScheduler` wrapper.
+
+- `register_task_runner(caller, fn)` — register a runnable under a name (e.g. `"pagepiper/ingest_pdf"`) once at product startup.
+- `dispatch_task(caller, args)` — runs the registered runnable as `fn(**args)` on a background thread, returns a `task_id` immediately. Raises `LookupError` if `caller` isn't registered — products with an `except Exception: ...` fallback (like pagepiper's `_dispatch_ingest`) keep working unchanged.
+- `get_task_status(task_id)` — returns `{"status": "queued"|"running"|"complete"|"error", "progress": int|None, "error": str|None}`. Raises `KeyError` for an unknown `task_id`.
+- `reset_dispatch_registry()` — test teardown only.
+- **Scope note:** this is the free-tier, in-process, single-node implementation — no cross-node distribution. Routing through the `circuitforge-orch` coordinator (BSL, separate package) would need a new generic task-dispatch endpoint on that coordinator, which doesn't exist today (`circuitforge_orch.client.CFOrchClient` only exposes model/service allocation, not a generic caller/args job queue); that's out of scope for this cf-core-only PR and tracked as follow-up. Consuming products (pagepiper) additionally need to call `register_task_runner()` at startup to benefit — not done here, since that's product-side work in a separate repo.
+- 10 tests: unregistered lookup, task_id uniqueness, args passed as kwargs, success/error status transitions, unregister, unknown task_id, status snapshot immutability.
+
+---
+
 ## [0.20.0] — 2026-05-05
 
 ### Fixed / Enhanced

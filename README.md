@@ -63,7 +63,7 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 | `documents` | Implemented | PDF, DOCX, and image OCR ingestion into `StructuredDocument` |
 | `affiliates` | Implemented | Affiliate URL wrapping with per-user opt-out and env-var fallback |
 | `preferences` | Implemented | User preference store — local YAML with pluggable backend; dot-path get/set |
-| `tasks` | Implemented | VRAM-aware LLM task scheduler; shared slot manager across services |
+| `tasks` | Implemented | VRAM-aware LLM task scheduler; shared slot manager across services; generic caller/args `dispatch_task`/`get_task_status` |
 | `manage` | Implemented | Cross-platform product process manager (Docker and native modes) |
 | `resources` | Implemented | VRAM allocation, eviction engine, GPU profile registry |
 | `text` | Implemented | Text utilities (normalize, chunk, truncate) + local LLM inference service (GGUF/transformers/VLM/classifier backends, multimodal content-block API) |
