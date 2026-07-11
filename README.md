@@ -93,6 +93,21 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 
 ---
 
+## Vue package: `@circuitforge/display`
+
+Strip-display Vue 3 primitives (`packages/display/`) for products running a secondary 1920×480 landscape / 480×1920 portrait kiosk display (Turnstone, Robin). Published as a **separate npm package**, not part of this Python distribution, so products that don't use it never pull in Vue as a dependency.
+
+```bash
+cd packages/display
+npm install
+npm test    # 37 tests — DisplayLayout, DisplayMetric, DisplayAlert, DisplayMacroButton
+npm run build
+```
+
+See `packages/display/README.md` for the component API and theming.
+
+---
+
 ## Usage: LLM Router
 
 The LLM router reads a config file at `~/.config/circuitforge/llm.yaml`, tries each backend in fallback order, and skips unreachable or disabled entries transparently.

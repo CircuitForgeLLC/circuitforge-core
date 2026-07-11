@@ -9,6 +9,10 @@ dist/
 build/
 "<MagicMock*"
 
+# packages/display (Vue/npm)
+node_modules/
+*.tsbuildinfo
+
 # cf-orch private profiles (commit on personal/heimdall branch only)
 circuitforge_core/resources/profiles/private/
 .worktrees/
