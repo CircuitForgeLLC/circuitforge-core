@@ -24,6 +24,16 @@ Accepts a multipart video file upload, writes it to a temp file, captions it via
 
 - `mkdocs.yml` — new blue-grey/cyan palette, wired to a central `docs/stylesheets/theme.css` for consistent theme-aware styling across the site (light and dark mode).
 
+**`circuitforge_core.hardware.model_vram_estimate`** — model-to-hardware VRAM fit check (closes #64)
+
+Answers "can this hardware run model X at quantization level Y?" — the missing capability noted against `cf_core.hardware`, which detects available VRAM but had no way to cross-reference model requirements. Queries the HuggingFace Hub API for parameter count (`safetensors.total`) and architecture (`config.json`: `num_hidden_layers`, `hidden_size`, `num_attention_heads`, `num_key_value_heads`), then applies the standard formula: `vram_gb = params * bytes_per_param(quant) + kv_cache_gb(ctx_len, arch) + overhead_gb`. Reference algorithm from [LLMcalc](https://github.com/Raskoll2/LLMcalc) (unlicensed upstream — algorithm reference only, no code copied, no dependency added).
+
+- `model_vram_estimate(hf_model_id, quant_level, *, ctx_len=4096, available_vram_mb=None, overhead_gb=0.6, timeout=10.0) -> VramEstimate`
+- Supports common quant levels: `fp32`, `fp16`/`bf16`, `int8`/`q8`/`q8_0`, `q6_k`, `q5_k_m`/`q5_0`, `int4`/`q4`/`q4_k_m`/`q4_0`, `q3_k_m`, `q2_k`.
+- KV cache sizing accounts for GQA (`num_key_value_heads`); falls back to 0 GB when the model's `config.json` lacks standard architecture fields, rather than failing the whole estimate — weights dominate VRAM use regardless.
+- Raises `ModelVramLookupError` on HF Hub API failures or missing safetensors metadata; raises `ValueError` for unrecognized quant levels.
+- Application points noted in the ticket: Avocet preflight (verify a checkpoint fits before benchmarking), cf-orch worker assignment (match model to GPU by VRAM fit), Peregrine/Kiwi onboarding wizard ("your GPU has X GB — here are models that will run well").
+
 ---
 
 ## [0.20.0] — 2026-05-05
