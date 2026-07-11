@@ -82,6 +82,7 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 | `cloud_session` | Implemented | Cloud session management primitives |
 | `input` | Implemented | Input handling — MediaPipe gesture recognition |
 | `job_quality` | Implemented | Job listing quality scoring and signal extraction |
+| `retry` | Implemented | Standard retry/backoff wrapper over `backon` for external-call modules |
 | `vision` | Stub | Vision router (moondream2 / SigLIP dispatch — planned) |
 | `wizard` | Stub | First-run wizard base class — products subclass `BaseWizard` |
 | `pipeline` | Stub | Staging queue base — products provide concrete schema |

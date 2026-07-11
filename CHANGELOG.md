@@ -6,6 +6,23 @@ Versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [0.22.0] — 2026-07-10
+
+### Added
+
+**`circuitforge_core.retry`** — standard retry/backoff wrapper over `backon` (closes #65)
+
+Standardizes retry/backoff behavior for cf-core modules and products that make external calls, replacing ad-hoc per-product retry loops. Wraps [backon](https://github.com/Llucs/backon) (MIT, zero stdlib dependencies) rather than reimplementing retry logic — chosen over `tenacity`/`backoff` per the eval in #65 for its native async support, built-in circuit breaker/hedging primitives, and a process-wide enable/disable toggle that's ideal for tests.
+
+- `on_exception(exception, *, max_tries=3, max_time=30.0, **backon_kwargs)` — decorator with CF's standard defaults (full-jitter exponential backoff); extra kwargs forward to `backon.on_exception` (e.g. `sleep=` for tests, `on_backoff=` for logging hooks).
+- `retry(target, *args, exception=Exception, max_tries=3, max_time=30.0, **kwargs)` — call an already-defined callable with the same retry behavior, for use without decorator syntax.
+- `disable_retries()` / `enable_retries()` — re-exported `backon` context managers for scoping retry-disable to a test or block.
+- `disable_retries_globally()` / `enable_retries_globally()` — re-exported `backon.disable()`/`enable()` process-wide toggles, for a test-suite-level fixture.
+- New core dependency: `backon>=4.0`.
+- Scope note: only the standalone wrapper module ships in this PR. Wiring it into `llm`, `affiliates`, `reranker`, and `activitypub` (the call sites identified in #65) is left as follow-up work per module, rather than retrofitting `LLMRouter`'s existing fallback-chain error handling in the same change.
+
+---
+
 ## [0.20.0] — 2026-05-05
 
 ### Fixed / Enhanced
