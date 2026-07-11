@@ -84,6 +84,7 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 | `input` | Implemented | Input handling — MediaPipe gesture recognition |
 | `job_quality` | Implemented | Job listing quality scoring and signal extraction |
 | `signal_bus` | Implemented | Generic SSE event publisher for real-time signal streams |
+| `retry` | Implemented | Standard retry/backoff wrapper over `backon` for external-call modules |
 | `vision` | Stub | Vision router (moondream2 / SigLIP dispatch — planned) |
 | `wizard` | Stub | First-run wizard base class — products subclass `BaseWizard` |
 | `pipeline` | Stub | Staging queue base — products provide concrete schema |
