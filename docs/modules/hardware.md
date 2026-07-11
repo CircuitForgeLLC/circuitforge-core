@@ -49,3 +49,18 @@ Profile selection rules:
 ## HardwareProfile
 
 The `HardwareProfile` dataclass is written to `compose.override.yml` by `preflight.py` at product startup, making GPU capabilities available to Docker Compose without hardcoding.
+
+## Model VRAM fit estimation
+
+`model_vram_estimate()` answers "can this hardware run model X at quantization level Y?" by querying the HuggingFace Hub API for parameter count and architecture, then applying the standard VRAM formula (weights + KV cache + overhead). Reference algorithm from [LLMcalc](https://github.com/Raskoll2/LLMcalc) — no code copied, since LLMcalc has no published license.
+
+```python
+from circuitforge_core.hardware import model_vram_estimate
+
+est = model_vram_estimate("Qwen/Qwen2.5-7B-Instruct", "q4_k_m", available_vram_mb=8_000)
+print(est.total_vram_gb, est.fits)  # e.g. 5.2 True
+```
+
+Use cases: Avocet preflight (verify a checkpoint fits before benchmarking), cf-orch worker assignment (match model to GPU by VRAM fit), and onboarding wizards ("your GPU has X GB — here are models that will run well").
+
+Raises `ModelVramLookupError` if the HF Hub API request fails or the model has no safetensors metadata; raises `ValueError` for an unrecognized `quant_level`.

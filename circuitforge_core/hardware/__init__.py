@@ -16,6 +16,7 @@ from .detect import detect_hardware, detect_hardware_json
 from .generator import generate_profile
 from .models import HardwareSpec, LLMBackendConfig, LLMConfig
 from .tiers import VRAM_TIERS, VramTier, select_tier
+from .vram_estimate import ModelVramLookupError, VramEstimate, model_vram_estimate
 
 __all__ = [
     "detect_hardware",
@@ -27,4 +28,7 @@ __all__ = [
     "VRAM_TIERS",
     "VramTier",
     "select_tier",
+    "ModelVramLookupError",
+    "VramEstimate",
+    "model_vram_estimate",
 ]
