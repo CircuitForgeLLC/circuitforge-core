@@ -9,14 +9,14 @@ theme:
   name: material
   palette:
     - scheme: default
-      primary: deep purple
-      accent: purple
+      primary: blue grey
+      accent: cyan
       toggle:
         icon: material/brightness-7
         name: Switch to dark mode
     - scheme: slate
-      primary: deep purple
-      accent: purple
+      primary: blue grey
+      accent: cyan
       toggle:
         icon: material/brightness-4
         name: Switch to light mode
@@ -77,6 +77,9 @@ nav:
     - Adding a Module: developer/adding-module.md
     - Editable Install Pattern: developer/editable-install.md
     - BSL vs MIT Boundaries: developer/licensing.md
+
+extra_css:
+  - stylesheets/theme.css
 
 extra_javascript:
   - plausible.js

@@ -7,6 +7,8 @@ so a zero-byte placeholder is sufficient.
 """
 from __future__ import annotations
 
+import os
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -234,3 +236,116 @@ def test_find_rejects_max_new_tokens_above_max(client, video_file):
         json={"video_path": video_file, "event": "wave", "max_new_tokens": 99999},
     )
     assert resp.status_code == 422
+
+
+# ── /caption/upload ───────────────────────────────────────────────────────────
+
+
+def test_caption_upload_returns_200(client):
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    )
+    assert resp.status_code == 200
+
+
+def test_caption_upload_response_matches_caption_shape(client):
+    data = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    ).json()
+    assert isinstance(data["scene"], str) and data["scene"]
+    assert isinstance(data["events"], list) and len(data["events"]) >= 1
+    assert isinstance(data["caption"], str) and data["caption"]
+    assert isinstance(data["model"], str)
+
+
+def test_caption_upload_preserves_file_extension(client, monkeypatch):
+    seen_paths: list[str] = []
+    original_caption = MockVideoBackend.caption
+
+    def _spy_caption(self, video_path, *, max_new_tokens=2048):
+        seen_paths.append(video_path)
+        return original_caption(self, video_path, max_new_tokens=max_new_tokens)
+
+    monkeypatch.setattr(MockVideoBackend, "caption", _spy_caption)
+
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mkv", b"\x00" * 16, "video/x-matroska")},
+    )
+    assert resp.status_code == 200
+    assert seen_paths and seen_paths[0].endswith(".mkv")
+
+
+def test_caption_upload_defaults_extension_when_filename_has_none(client, monkeypatch):
+    seen_paths: list[str] = []
+    original_caption = MockVideoBackend.caption
+
+    def _spy_caption(self, video_path, *, max_new_tokens=2048):
+        seen_paths.append(video_path)
+        return original_caption(self, video_path, max_new_tokens=max_new_tokens)
+
+    monkeypatch.setattr(MockVideoBackend, "caption", _spy_caption)
+
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample", b"\x00" * 16, "application/octet-stream")},
+    )
+    assert resp.status_code == 200
+    assert seen_paths and seen_paths[0].endswith(".mkv")
+
+
+def test_caption_upload_removes_temp_file_after_request(client, monkeypatch):
+    captured_paths: list[str] = []
+    original_caption = MockVideoBackend.caption
+
+    def _spy_caption(self, video_path, *, max_new_tokens=2048):
+        captured_paths.append(video_path)
+        return original_caption(self, video_path, max_new_tokens=max_new_tokens)
+
+    monkeypatch.setattr(MockVideoBackend, "caption", _spy_caption)
+
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    )
+    assert resp.status_code == 200
+    assert captured_paths
+    assert not os.path.exists(captured_paths[0])
+
+
+def test_caption_upload_503_when_no_backend(client):
+    video_app._backend = None
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    )
+    assert resp.status_code == 503
+
+
+def test_caption_upload_500_and_cleans_up_on_backend_error(client, monkeypatch):
+    captured_paths: list[str] = []
+
+    def _raise(self, video_path, *, max_new_tokens=2048):
+        captured_paths.append(video_path)
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(MockVideoBackend, "caption", _raise)
+
+    resp = client.post(
+        "/caption/upload",
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    )
+    assert resp.status_code == 500
+    assert captured_paths
+    assert not os.path.exists(captured_paths[0])
+
+
+def test_caption_upload_custom_max_new_tokens(client):
+    resp = client.post(
+        "/caption/upload",
+        params={"max_new_tokens": 512},
+        files={"file": ("sample.mp4", b"\x00" * 16, "video/mp4")},
+    )
+    assert resp.status_code == 200

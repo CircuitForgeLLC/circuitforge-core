@@ -1,0 +1,39 @@
+/*
+ * circuitforge-core docs theme
+ *
+ * Central place for palette tweaks and small layout fixes on top of
+ * mkdocs-material's blue grey / cyan palette (see mkdocs.yml). Keep
+ * product-specific overrides out of individual markdown pages — add
+ * them here so light/dark mode and mobile layout stay consistent
+ * across the whole site.
+ */
+
+:root {
+  --cf-accent-strong: #00acc1; /* cyan 600, matches material accent */
+  --cf-code-bg-light: #eceff1; /* blue grey 50 */
+  --cf-code-bg-dark: #263238; /* blue grey 900 */
+}
+
+/* Slightly stronger contrast for inline code than material's default,
+   in both color schemes. */
+[data-md-color-scheme="default"] {
+  --md-code-bg-color: var(--cf-code-bg-light);
+}
+
+[data-md-color-scheme="slate"] {
+  --md-code-bg-color: var(--cf-code-bg-dark);
+}
+
+/* Module reference tables can get wide (Module | Status | Description);
+   let them scroll horizontally on narrow viewports instead of overflowing
+   the page or squeezing text unreadably small. */
+.md-typeset table:not([class]) {
+  display: block;
+  overflow-x: auto;
+}
+
+@media screen and (max-width: 44.9375em) {
+  .md-typeset table:not([class]) {
+    font-size: 0.7rem;
+  }
+}
