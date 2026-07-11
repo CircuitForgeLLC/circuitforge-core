@@ -1,0 +1,48 @@
+{
+  "name": "@circuitforge/display",
+  "version": "0.1.0",
+  "description": "Strip-display Vue primitives for CircuitForge products (1920x480 landscape / 480x1920 portrait kiosk displays)",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core.git",
+    "directory": "packages/display"
+  },
+  "files": [
+    "dist",
+    "launcher"
+  ],
+  "main": "./dist/circuitforge-display.cjs",
+  "module": "./dist/circuitforge-display.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/circuitforge-display.js",
+      "require": "./dist/circuitforge-display.cjs"
+    },
+    "./style.css": "./dist/circuitforge-display.css"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc --emitDeclarationOnly && vite build",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "vue": "^3.5.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "@vitejs/plugin-vue": "^6.0.2",
+    "@vue/test-utils": "^2.4.6",
+    "@vue/tsconfig": "^0.8.1",
+    "jsdom": "^25.0.1",
+    "typescript": "~5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4",
+    "vue": "^3.5.25",
+    "vue-tsc": "^3.1.5"
+  }
+}

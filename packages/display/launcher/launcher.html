@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CircuitForge Display Launcher</title>
+<style>
+  :root {
+    --cf-display-surface: #0d1117;
+    --cf-display-surface-raised: #161b22;
+    --cf-display-surface-border: #30363d;
+    --cf-display-accent: #39d353;
+    --cf-display-text-primary: #e6edf3;
+    --cf-display-text-muted: #8b949e;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --cf-display-surface: #ffffff;
+      --cf-display-surface-raised: #f6f8fa;
+      --cf-display-surface-border: #d0d7de;
+      --cf-display-accent: #1f883d;
+      --cf-display-text-primary: #1f2328;
+      --cf-display-text-muted: #59636e;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: var(--cf-display-surface);
+    color: var(--cf-display-text-primary);
+    font-family: system-ui, sans-serif;
+  }
+  #app {
+    display: flex;
+    flex-wrap: wrap;
+    align-content: center;
+    justify-content: center;
+    gap: 1rem;
+    height: 100%;
+    padding: 1rem;
+  }
+  .launcher-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.25rem;
+    min-width: 8rem;
+    min-height: 8rem;
+    padding: 1rem;
+    border: 1px solid var(--cf-display-surface-border);
+    border-radius: 0.75rem;
+    background: var(--cf-display-surface-raised);
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+  .launcher-tile:hover, .launcher-tile:focus-visible {
+    border-color: var(--cf-display-accent);
+    outline: none;
+  }
+  .launcher-tile__name {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .launcher-tile__profile {
+    font-size: 0.75rem;
+    color: var(--cf-display-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  #empty {
+    color: var(--cf-display-text-muted);
+    text-align: center;
+    padding: 2rem;
+  }
+</style>
+</head>
+<body>
+<!--
+  cf-core strip display launcher — no framework dependency, per the strip
+  display spec. Config is a small JSON file the user edits once, fetched
+  from ./launcher.config.json next to this HTML file (same-origin — this is
+  meant to be served by a product's own backend, e.g. Turnstone, at a
+  well-known /launcher route, or served as a static file alongside a
+  kiosk browser profile).
+
+  {
+    "products": [
+      { "name": "Turnstone", "url": "http://localhost:8600/display", "profile": "sysadmin" }
+    ],
+    "default": 0
+  }
+
+  Tapping a tile navigates the kiosk window to that product's display URL.
+  On first boot, kiosk mode should open this launcher.
+-->
+<div id="app"></div>
+<div id="empty" style="display: none;">
+  No products configured. Add entries to <code>launcher.config.json</code> next to this file.
+</div>
+<script>
+  (async function () {
+    const app = document.getElementById('app');
+    const empty = document.getElementById('empty');
+
+    let config;
+    try {
+      const resp = await fetch('./launcher.config.json');
+      config = await resp.json();
+    } catch (err) {
+      config = { products: [] };
+    }
+
+    const products = Array.isArray(config.products) ? config.products : [];
+    if (products.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+
+    for (const product of products) {
+      const tile = document.createElement('a');
+      tile.className = 'launcher-tile';
+      tile.href = product.url;
+      tile.setAttribute('aria-label', `Open ${product.name}`);
+
+      const name = document.createElement('span');
+      name.className = 'launcher-tile__name';
+      name.textContent = product.name;
+      tile.appendChild(name);
+
+      if (product.profile) {
+        const profile = document.createElement('span');
+        profile.className = 'launcher-tile__profile';
+        profile.textContent = product.profile;
+        tile.appendChild(profile);
+      }
+
+      app.appendChild(tile);
+    }
+
+    const defaultIndex = Number.isInteger(config.default) ? config.default : null;
+    if (defaultIndex !== null && products[defaultIndex] && location.hash === '#auto') {
+      location.href = products[defaultIndex].url;
+    }
+  })();
+</script>
+</body>
+</html>
