@@ -45,6 +45,15 @@ Standardizes retry/backoff behavior for cf-core modules and products that make e
 - New core dependency: `backon>=4.0`.
 - Scope note: only the standalone wrapper module ships in this PR. Wiring it into `llm`, `affiliates`, `reranker`, and `activitypub` (the call sites identified in #65) is left as follow-up work per module, rather than retrofitting `LLMRouter`'s existing fallback-chain error handling in the same change.
 
+**`circuitforge_core.task_bridge`** — shared data contract for pushing tasks into an external scheduler (closes #66)
+
+Kiwi is the pilot consumer, pushing pantry expiry-alert tasks into Ashley Venn's Focus Flow scheduler (AGPL-3.0, external project). To keep AGPL and BSL code from ever sharing a process or artifact, the task data contract lives here in cf-core (MIT); each product implements its own exporter/receiver. Design spec: `circuitforge-plans/shared/superpowers/specs/2026-07-05-focus-flow-task-bridge-design.md`.
+
+- `models.py` — `ExternalTask` frozen dataclass: `schema_version`, `source_product`, `external_id`, `title`, `notes`, `due_at` (ISO 8601 UTC), `kind` (always `"flexible"` in v1 — external sources can never inject urgency into another product's UX), `status` (`"active"` / `"cancelled"`). Validates required fields and `kind`/`status` values in `__post_init__`.
+- `client.py` — `push_tasks(endpoint, token, tasks)`: thin `httpx` wrapper POSTing a batch as `{"tasks": [...]}` with a bearer token. Raises `TaskBridgeError` on transport failure or non-2xx response. No transport server, no auth/token generation — that lives on the receiving side.
+- New `task-bridge` extra (`httpx>=0.27`).
+- 19 tests: schema/validation/serialization (no network) plus a contract test against a real local `http.server` instance standing in for Focus Flow's importer, verifying the client emits a conformant payload.
+
 ---
 
 ## [0.20.0] — 2026-05-05

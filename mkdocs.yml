@@ -71,6 +71,7 @@ nav:
     - stt: modules/stt.md
     - tts: modules/tts.md
     - pipeline: modules/pipeline.md
+    - task_bridge: modules/task_bridge.md
     - vision: modules/vision.md
     - wizard: modules/wizard.md
   - Developer Guide:

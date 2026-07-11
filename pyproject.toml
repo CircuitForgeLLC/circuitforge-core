@@ -24,6 +24,9 @@ sync = [
 signal-bus = [
     "fastapi>=0.110",
 ]
+task-bridge = [
+    "httpx>=0.27",
+]
 community = [
     "psycopg2>=2.9",
 ]

@@ -45,6 +45,7 @@ pip install circuitforge-core[mqtt]                 # MQTT broker client
 pip install circuitforge-core[signal-bus]           # SSE event publisher for real-time signal streams
 pip install circuitforge-core[meshtastic-service]   # Meshtastic mesh radio + MQTT + FastAPI
 pip install circuitforge-core[memory]               # Knowledge graph via mnemo sidecar
+pip install circuitforge-core[task-bridge]          # Push tasks into an external scheduler (e.g. Focus Flow)
 pip install circuitforge-core[community]            # PostgreSQL-backed community store
 pip install circuitforge-core[manage]               # cf-manage CLI (Typer)
 pip install circuitforge-core[dev]                  # All dev dependencies
@@ -85,6 +86,7 @@ pip install circuitforge-core[dev]                  # All dev dependencies
 | `job_quality` | Implemented | Job listing quality scoring and signal extraction |
 | `signal_bus` | Implemented | Generic SSE event publisher for real-time signal streams |
 | `retry` | Implemented | Standard retry/backoff wrapper over `backon` for external-call modules |
+| `task_bridge` | Implemented | Shared data contract + push client for external task schedulers (e.g. Focus Flow) |
 | `vision` | Stub | Vision router (moondream2 / SigLIP dispatch — planned) |
 | `wizard` | Stub | First-run wizard base class — products subclass `BaseWizard` |
 | `pipeline` | Stub | Staging queue base — products provide concrete schema |
