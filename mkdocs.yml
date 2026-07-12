@@ -79,6 +79,7 @@ nav:
     - Editable Install Pattern: developer/editable-install.md
     - BSL vs MIT Boundaries: developer/licensing.md
     - "@circuitforge/display (Vue package)": developer/display-package.md
+  - All CF Docs: https://docs.circuitforge.tech
 
 extra_css:
   - stylesheets/theme.css
