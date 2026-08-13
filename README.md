@@ -8,9 +8,9 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" /></a>
-  <img src="https://img.shields.io/badge/version-0.21.0-blue.svg" alt="v0.21.0" />
+  <img src="https://img.shields.io/badge/version-0.22.0-blue.svg" alt="v0.22.0" />
   <img src="https://img.shields.io/badge/python-3.11%2B-blue.svg" alt="Python 3.11+" />
-  <a href="https://git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core"><img src="https://img.shields.io/badge/repo-Forgejo-orange.svg" alt="Forgejo" /></a>
+  <a href="https://git.circuitforge.tech/Circuit-Forge/circuitforge-core"><img src="https://img.shields.io/badge/repo-Forgejo-orange.svg" alt="Forgejo" /></a>
 </p>
 
 ---
@@ -170,12 +170,12 @@ with get_connection(Path("data/app.db")) as conn:
 
 | Product | Description |
 |---|---|
-| [peregrine](https://git.opensourcesolarpunk.com/Circuit-Forge/peregrine) | Job search — discovery, cover letters, interview prep |
-| [snipe](https://git.opensourcesolarpunk.com/Circuit-Forge/snipe) | Auction sniping — eBay trust scoring, bid timing |
-| [kiwi](https://git.opensourcesolarpunk.com/Circuit-Forge/kiwi) | Pantry tracker with barcode/receipt OCR and recipe suggestions |
-| [avocet](https://git.opensourcesolarpunk.com/Circuit-Forge/avocet) | Email classifier training and benchmark harness |
-| [osprey](https://git.opensourcesolarpunk.com/Circuit-Forge/osprey) | Government hold-line automation |
-| [linnet](https://git.opensourcesolarpunk.com/Circuit-Forge/linnet) | Real-time tone annotation and voice transcription |
+| [peregrine](https://git.circuitforge.tech/Circuit-Forge/peregrine) | Job search — discovery, cover letters, interview prep |
+| [snipe](https://git.circuitforge.tech/Circuit-Forge/snipe) | Auction sniping — eBay trust scoring, bid timing |
+| [kiwi](https://git.circuitforge.tech/Circuit-Forge/kiwi) | Pantry tracker with barcode/receipt OCR and recipe suggestions |
+| [avocet](https://git.circuitforge.tech/Circuit-Forge/avocet) | Email classifier training and benchmark harness |
+| [osprey](https://git.circuitforge.tech/Circuit-Forge/osprey) | Government hold-line automation |
+| [linnet](https://git.circuitforge.tech/Circuit-Forge/linnet) | Real-time tone annotation and voice transcription |
 | pagepiper | PDF/rulebook RAG (retrieval-augmented generation) search |
 
 ---
@@ -185,7 +185,7 @@ with get_connection(Path("data/app.db")) as conn:
 circuitforge-core is MIT licensed. Contributions are welcome.
 
 ```bash
-git clone https://git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core
+git clone https://git.circuitforge.tech/Circuit-Forge/circuitforge-core
 cd circuitforge-core
 pip install -e ".[dev]"
 pytest
@@ -197,7 +197,7 @@ pytest
 - Tests live in `tests/` — aim for 80% coverage on new code
 - Use `ruff` for linting before submitting a PR
 
-Open issues and PRs at: [git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core](https://git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-core)
+Open issues and PRs at: [git.circuitforge.tech/Circuit-Forge/circuitforge-core](https://git.circuitforge.tech/Circuit-Forge/circuitforge-core)
 
 ---
 
