@@ -208,6 +208,44 @@ def create_app(
 
     app = FastAPI(title="cf-text", version="0.1.0")
 
+    # Readiness probe state. A plain dict rather than a class: it is only ever
+    # read and rewritten wholesale by the health handler, and a stale read under
+    # concurrency costs at most one extra probe.
+    _probe: dict = {"ts": 0.0, "ok": False, "err": "not yet probed"}
+    _probe_ttl = float(os.environ.get("CF_TEXT_HEALTH_PROBE_TTL", "30"))
+
+    def _probe_backend() -> tuple[bool, str | None]:
+        """Generate a single token, to prove the model actually serves.
+
+        WHY (2026-09-08). The previous check asserted only that the backend
+        object was non-None, then reported model_name (a path stem) and vram_mb
+        (estimated from the file size on disk). Neither reads the model, so it
+        could not fail however broken the model was.
+
+        On 2026-09-07 a cf-text instance on node `sif` served
+        GET /health -> 200 {"status":"ok","model":"capybarahermes-2.5-mistral-7b.Q6_K",
+        "vram_mb":6232} while every POST /v1/chat/completions threw in 60ms. The
+        coordinator had no way to know, kept routing to it, and returned
+        502 "Service returned 500" to every caller for hours with the whole
+        fleet showing green.
+
+        Cached for CF_TEXT_HEALTH_PROBE_TTL seconds (default 30): the
+        coordinator polls health continuously and a generation per poll would be
+        a real cost on a shared GPU. The TTL is the trade -- a fault surfaces
+        within one TTL rather than instantly.
+        """
+        now = time.time()
+        if now - _probe["ts"] < _probe_ttl:
+            return _probe["ok"], _probe["err"]
+        try:
+            _backend.generate("ok", max_tokens=1)
+            _probe.update({"ts": now, "ok": True, "err": None})
+        except Exception as exc:  # noqa: BLE001 -- any failure means "not serving"
+            _probe.update({"ts": now, "ok": False,
+                           "err": f"{exc.__class__.__name__}: {exc}"[:200]})
+            logger.warning("cf-text health probe failed: %s", _probe["err"])
+        return _probe["ok"], _probe["err"]
+
     @app.get("/health")
     def health() -> dict:
         if _pii_filter is not None:
@@ -215,10 +253,20 @@ def create_app(
             return {"status": "ok", "model": b.model_name, "vram_mb": b.vram_mb, "backend": "classifier"}
         if _backend is None:
             raise HTTPException(503, detail="backend not initialised")
+        ok, err = _probe_backend()
+        if not ok:
+            # 503 rather than 200-with-a-flag: the coordinator already treats a
+            # non-2xx health response as unhealthy, so this surfaces the fault
+            # without needing a matching change on the coordinator side.
+            raise HTTPException(503, detail=f"model not serving: {err}")
         return {
             "status": "ok",
             "model": _backend.model_name,
             "vram_mb": _backend.vram_mb,
+            # Surfaced so an operator can distinguish a freshly-verified "ok"
+            # from one coasting on a cached probe -- exactly the distinction
+            # that would have made the 2026-09-07 outage obvious at a glance.
+            "probed_age_s": round(time.time() - _probe["ts"], 1),
         }
 
     @app.post("/filter")
