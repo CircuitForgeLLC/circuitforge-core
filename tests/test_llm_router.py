@@ -91,6 +91,42 @@ def test_complete_raises_when_all_backends_exhausted():
             router.complete("test")
 
 
+def test_complete_exhaustion_message_lists_per_backend_reasons():
+    """The exception should say *why* each backend was skipped, not just that
+    every backend was exhausted — callers surface this message directly to
+    the end user, so a generic message leads to wrong troubleshooting advice
+    (e.g. telling someone to add an API key when the real issue is an
+    unreachable Ollama host or a model that was never pulled)."""
+    router = _make_router(
+        {
+            "fallback_order": ["unreachable_backend", "anthropic"],
+            "backends": {
+                "unreachable_backend": {
+                    "type": "openai_compat",
+                    "base_url": "http://nowhere:1/v1",
+                    "model": "x",
+                    "supports_images": False,
+                },
+                "anthropic": {
+                    "type": "anthropic",
+                    "api_key_env": "ANTHROPIC_API_KEY",
+                    "model": "claude-sonnet-4-6",
+                    "supports_images": False,
+                },
+            },
+        }
+    )
+    with patch.object(router, "_is_reachable", return_value=False):
+        with patch.dict("os.environ", {}, clear=True):
+            with pytest.raises(RuntimeError) as exc_info:
+                router.complete("test")
+    message = str(exc_info.value)
+    assert "unreachable_backend" in message
+    assert "unreachable" in message
+    assert "anthropic" in message
+    assert "ANTHROPIC_API_KEY not set" in message
+
+
 def test_try_cf_orch_alloc_import_path():
     """Verify lazy import points to circuitforge_orch, not circuitforge_core.resources."""
     import inspect

@@ -273,11 +273,13 @@ class LLMRouter:
             if fallback_order is not None
             else self.config["fallback_order"]
         )
+        skipped: list[str] = []
         for name in order:
             backend = self.config["backends"][name]
 
             if not backend.get("enabled", True):
                 print(f"[LLMRouter] {name}: disabled, skipping")
+                skipped.append(f"{name}: disabled")
                 continue
 
             supports_images = backend.get("supports_images", False)
@@ -286,11 +288,13 @@ class LLMRouter:
             # vision_service only used when images provided
             if is_vision_service and not images:
                 print(f"[LLMRouter] {name}: vision_service skipped (no images)")
+                skipped.append(f"{name}: no images provided")
                 continue
 
             # non-vision backends skipped when images provided and they don't support it
             if images and not supports_images and not is_vision_service:
                 print(f"[LLMRouter] {name}: no image support, skipping")
+                skipped.append(f"{name}: no image support")
                 continue
 
             if is_vision_service:
@@ -303,6 +307,7 @@ class LLMRouter:
                     backend = {**backend, "base_url": orch_alloc.url}
                 elif not self._is_reachable(backend["base_url"]):
                     print(f"[LLMRouter] {name}: unreachable, skipping")
+                    skipped.append(f"{name}: unreachable at {backend['base_url']}")
                     continue
                 try:
                     resp = requests.post(
@@ -318,6 +323,7 @@ class LLMRouter:
                     return resp.json()["text"]
                 except Exception as e:
                     print(f"[LLMRouter] {name}: error — {e}, trying next")
+                    skipped.append(f"{name}: {e}")
                     continue
                 finally:
                     if orch_ctx is not None:
@@ -335,11 +341,13 @@ class LLMRouter:
                 elif not self._is_reachable(backend["base_url"]):
                     # Static backend (no cf-orch) — skip if not reachable.
                     print(f"[LLMRouter] {name}: unreachable, skipping")
+                    skipped.append(f"{name}: unreachable at {backend['base_url']}")
                     continue
                 try:
                     client = OpenAI(
                         base_url=backend["base_url"],
                         api_key=backend.get("api_key") or "any",
+                        default_headers=backend.get("headers") or None,
                     )
                     raw_model = model_override or backend["model"]
                     model = self._resolve_model(client, raw_model)
@@ -370,6 +378,7 @@ class LLMRouter:
 
                 except Exception as e:
                     print(f"[LLMRouter] {name}: error — {e}, trying next")
+                    skipped.append(f"{name}: {e}")
                     continue
                 finally:
                     if orch_ctx is not None:
@@ -384,6 +393,7 @@ class LLMRouter:
                     print(
                         f"[LLMRouter] {name}: {backend['api_key_env']} not set, skipping"
                     )
+                    skipped.append(f"{name}: {backend['api_key_env']} not set")
                     continue
                 try:
                     import anthropic as _anthropic
@@ -417,9 +427,15 @@ class LLMRouter:
                     return msg.content[0].text
                 except Exception as e:
                     print(f"[LLMRouter] {name}: error — {e}, trying next")
+                    skipped.append(f"{name}: {e}")
                     continue
 
-        raise RuntimeError("All LLM backends exhausted")
+        if skipped:
+            detail = "; ".join(skipped)
+            raise RuntimeError(f"All LLM backends exhausted. Tried: {detail}")
+        raise RuntimeError(
+            "All LLM backends exhausted. No backends configured in fallback_order."
+        )
 
     def embed(
         self,
@@ -482,6 +498,7 @@ class LLMRouter:
                 client = OpenAI(
                     base_url=backend["base_url"],
                     api_key=backend.get("api_key") or "any",
+                    default_headers=backend.get("headers") or None,
                 )
                 model = embed_model
                 resp = client.embeddings.create(model=model, input=texts)
