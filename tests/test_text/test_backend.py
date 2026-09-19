@@ -153,7 +153,14 @@ class TestMakeTextBackend:
 
 class TestMakeTextBackendVllmSpawning:
     def test_spawns_supervisor_when_no_external_url_set(self, monkeypatch):
-        monkeypatch.delenv("CF_TEXT_VLLM_URL", raising=False)
+        # Use setenv("") rather than delenv(raising=False) here: delenv on an
+        # already-absent var records no undo action, so the direct
+        # os.environ[...] = ... assignment the code under test performs would
+        # leak into later tests in the same session (a real risk since
+        # pytest-randomly varies test order). setenv("") is falsy for the
+        # `if not os.environ.get(...)` guard below, so it still exercises the
+        # spawn branch, but monkeypatch now has an original state to restore.
+        monkeypatch.setenv("CF_TEXT_VLLM_URL", "")
         monkeypatch.delenv("CF_TEXT_MOCK", raising=False)
         with patch(
             "circuitforge_core.text.backends.vllm_subprocess.VllmSubprocessSupervisor"

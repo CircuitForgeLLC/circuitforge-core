@@ -110,6 +110,11 @@ class VllmSubprocessSupervisor:
         deadline = time.monotonic() + self._health_timeout_s
         url = f"{self._base_url}/health"
         while time.monotonic() < deadline:
+            if self._proc is not None and self._proc.poll() is not None:
+                raise RuntimeError(
+                    f"vLLM subprocess for {self._model_id!r} exited with code "
+                    f"{self._proc.returncode} before becoming healthy"
+                )
             try:
                 resp = httpx.get(url, timeout=2.0)
                 if resp.status_code == 200:
