@@ -1,6 +1,7 @@
 """Tests for cf-text backend selection, mock backend, and public API."""
 import os
 import pytest
+from unittest.mock import patch
 
 from circuitforge_core.text.backends.base import (
     ChatMessage,
@@ -146,6 +147,48 @@ class TestMakeTextBackend:
         # Use a clearly nonexistent local path — avoids a network hit and HF download
         with pytest.raises(Exception):
             make_text_backend("/nonexistent/local/model-dir", mock=False)
+
+
+# ── make_text_backend with vllm spawning ──────────────────────────────────────
+
+class TestMakeTextBackendVllmSpawning:
+    def test_spawns_supervisor_when_no_external_url_set(self, monkeypatch):
+        # Use setenv("") rather than delenv(raising=False) here: delenv on an
+        # already-absent var records no undo action, so the direct
+        # os.environ[...] = ... assignment the code under test performs would
+        # leak into later tests in the same session (a real risk since
+        # pytest-randomly varies test order). setenv("") is falsy for the
+        # `if not os.environ.get(...)` guard below, so it still exercises the
+        # spawn branch, but monkeypatch now has an original state to restore.
+        monkeypatch.setenv("CF_TEXT_VLLM_URL", "")
+        monkeypatch.delenv("CF_TEXT_MOCK", raising=False)
+        with patch(
+            "circuitforge_core.text.backends.vllm_subprocess.VllmSubprocessSupervisor"
+        ) as mock_supervisor_cls, patch(
+            "circuitforge_core.text.backends.vllm.VllmBackend"
+        ) as mock_backend_cls:
+            mock_supervisor = mock_supervisor_cls.return_value
+            mock_supervisor.ensure_running.return_value = "http://localhost:8300"
+            make_text_backend("vllm://IFM/K2-Horizon-7B", mock=False)
+
+        mock_supervisor_cls.assert_called_once_with("IFM/K2-Horizon-7B")
+        mock_supervisor.ensure_running.assert_called_once()
+        assert os.environ["CF_TEXT_VLLM_URL"] == "http://localhost:8300"
+        mock_backend_cls.assert_called_once_with(model_path="vllm://IFM/K2-Horizon-7B")
+
+    def test_skips_supervisor_when_external_url_already_set(self, monkeypatch):
+        monkeypatch.setenv("CF_TEXT_VLLM_URL", "http://external-vllm:8000")
+        monkeypatch.delenv("CF_TEXT_MOCK", raising=False)
+        with patch(
+            "circuitforge_core.text.backends.vllm_subprocess.VllmSubprocessSupervisor"
+        ) as mock_supervisor_cls, patch(
+            "circuitforge_core.text.backends.vllm.VllmBackend"
+        ) as mock_backend_cls:
+            make_text_backend("vllm://IFM/K2-Horizon-7B", mock=False)
+
+        mock_supervisor_cls.assert_not_called()
+        assert os.environ["CF_TEXT_VLLM_URL"] == "http://external-vllm:8000"
+        mock_backend_cls.assert_called_once_with(model_path="vllm://IFM/K2-Horizon-7B")
 
 
 # ── Public API (singleton) ────────────────────────────────────────────────────

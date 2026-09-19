@@ -253,6 +253,20 @@ def make_text_backend(
 
     if resolved == "vllm":
         from circuitforge_core.text.backends.vllm import VllmBackend
+        # NOTE: CF_TEXT_VLLM_URL is a single, process-global env var. Once it is
+        # set by the first vllm:// model spawned in this process, this early-out
+        # will skip spawning a new supervisor for any later, DIFFERENT model_path
+        # and silently proxy requests to the first model's still-running server.
+        # This is safe today because cf-text runs exactly one model per process.
+        # The design spec anticipates a future multi-model path (for example, a
+        # premium user's model_override naming a different vllm:// alias) -- if
+        # that lands, this needs to become a per-model_id mapping (or otherwise
+        # keyed lookup) instead of a single global, or it will silently misroute.
+        if not os.environ.get("CF_TEXT_VLLM_URL"):
+            from circuitforge_core.text.backends.vllm_subprocess import VllmSubprocessSupervisor
+            model_id = model_path.removeprefix("vllm://")
+            supervisor = VllmSubprocessSupervisor(model_id)
+            os.environ["CF_TEXT_VLLM_URL"] = supervisor.ensure_running()
         return VllmBackend(model_path=model_path)
 
     raise ValueError(
