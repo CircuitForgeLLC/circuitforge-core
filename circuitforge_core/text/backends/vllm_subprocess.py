@@ -7,11 +7,19 @@ cf-text itself, using the isolated cf-vllm conda environment (vLLM hard-pins
 a torch version incompatible with cf-text's own dependencies).
 
 Environment:
-  CF_TEXT_VLLM_PYTHON   Path to the cf-vllm environment's python. Required
-                         when a subprocess actually needs spawning.
-  CF_TEXT_VLLM_PORT     Fixed internal port for the spawned server (default
-                         8300 -- distinct from the standalone vllm service's
-                         8200 and cf-text's own 8008/8009 range).
+  CF_TEXT_VLLM_PYTHON        Path to the cf-vllm environment's python.
+                              Required when a subprocess actually needs
+                              spawning.
+  CF_TEXT_VLLM_PORT          Fixed internal port for the spawned server
+                              (default 8300 -- distinct from the standalone
+                              vllm service's 8200 and cf-text's own
+                              8008/8009 range).
+  CF_TEXT_VLLM_GPU_MEM_UTIL  Override the default 0.90 gpu_memory_utilization.
+                              Useful on a node whose GPU isn't fully free at
+                              baseline (e.g. a shared desktop machine) --
+                              found necessary on Muninn's RTX 3090, which
+                              reserves a few hundred MB outside any single
+                              nvidia-smi compute-app entry.
 
 MIT licensed.
 """
@@ -42,7 +50,7 @@ class VllmSubprocessSupervisor:
         *,
         python_path: str | None = None,
         port: int | None = None,
-        gpu_memory_utilization: float = 0.90,
+        gpu_memory_utilization: float | None = None,
         dtype: str = "float16",
         health_timeout_s: float = 300.0,
         poll_interval_s: float = 1.0,
@@ -50,7 +58,9 @@ class VllmSubprocessSupervisor:
         self._model_id = model_id
         self._python_path = python_path or os.environ.get("CF_TEXT_VLLM_PYTHON", "")
         self._port = port or int(os.environ.get("CF_TEXT_VLLM_PORT", _DEFAULT_PORT))
-        self._gpu_memory_utilization = gpu_memory_utilization
+        self._gpu_memory_utilization = gpu_memory_utilization or float(
+            os.environ.get("CF_TEXT_VLLM_GPU_MEM_UTIL", 0.90)
+        )
         self._dtype = dtype
         self._health_timeout_s = health_timeout_s
         self._poll_interval_s = poll_interval_s

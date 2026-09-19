@@ -55,6 +55,42 @@ class TestVllmSubprocessSupervisorSpawn:
         assert args[args.index("--gpu-memory-utilization") + 1] == "0.85"
         assert args[args.index("--dtype") + 1] == "bfloat16"
 
+    def test_gpu_mem_util_env_override_used_when_not_passed_explicitly(self, monkeypatch):
+        """A node whose GPU isn't fully free at baseline (found on Muninn's
+        RTX 3090 -- ~2.6 GB reserved outside any single nvidia-smi
+        compute-app entry) needs a lower ceiling than the 0.90 default."""
+        monkeypatch.setattr("atexit.register", lambda *a, **k: None)
+        monkeypatch.setenv("CF_TEXT_VLLM_PYTHON", "/devl/miniconda3/envs/cf-vllm/bin/python")
+        monkeypatch.setenv("CF_TEXT_VLLM_GPU_MEM_UTIL", "0.80")
+        with patch("subprocess.Popen") as mock_popen, \
+             patch("httpx.get", return_value=_mock_health_response()):
+            sup = VllmSubprocessSupervisor("IFM/K2-Horizon-7B", port=8300)
+            sup.ensure_running()
+        args = mock_popen.call_args.args[0]
+        assert args[args.index("--gpu-memory-utilization") + 1] == "0.8"
+
+    def test_explicit_gpu_mem_util_wins_over_env(self, monkeypatch):
+        monkeypatch.setattr("atexit.register", lambda *a, **k: None)
+        monkeypatch.setenv("CF_TEXT_VLLM_PYTHON", "/devl/miniconda3/envs/cf-vllm/bin/python")
+        monkeypatch.setenv("CF_TEXT_VLLM_GPU_MEM_UTIL", "0.80")
+        with patch("subprocess.Popen") as mock_popen, \
+             patch("httpx.get", return_value=_mock_health_response()):
+            sup = VllmSubprocessSupervisor("IFM/K2-Horizon-7B", port=8300, gpu_memory_utilization=0.85)
+            sup.ensure_running()
+        args = mock_popen.call_args.args[0]
+        assert args[args.index("--gpu-memory-utilization") + 1] == "0.85"
+
+    def test_default_gpu_mem_util_is_090_when_nothing_set(self, monkeypatch):
+        monkeypatch.setattr("atexit.register", lambda *a, **k: None)
+        monkeypatch.setenv("CF_TEXT_VLLM_PYTHON", "/devl/miniconda3/envs/cf-vllm/bin/python")
+        monkeypatch.delenv("CF_TEXT_VLLM_GPU_MEM_UTIL", raising=False)
+        with patch("subprocess.Popen") as mock_popen, \
+             patch("httpx.get", return_value=_mock_health_response()):
+            sup = VllmSubprocessSupervisor("IFM/K2-Horizon-7B", port=8300)
+            sup.ensure_running()
+        args = mock_popen.call_args.args[0]
+        assert args[args.index("--gpu-memory-utilization") + 1] == "0.9"
+
     def test_does_not_pass_a_device_flag(self, monkeypatch):
         """vllm's api_server has no --device flag (confirmed against the
         installed vllm 0.19.1: passing one is a hard argparse error). GPU
