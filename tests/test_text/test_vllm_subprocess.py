@@ -1,4 +1,4 @@
-"""Tests for VllmSubprocessSupervisor — spawns and health-polls a vLLM child process."""
+"""Tests for VllmSubprocessSupervisor -- spawns and health-polls a vLLM child process."""
 from __future__ import annotations
 
 import os
@@ -69,6 +69,7 @@ class TestVllmSubprocessSupervisorSpawn:
         assert args[args.index("--device") + 1] == "cuda:0"
 
     def test_missing_python_path_raises(self, monkeypatch):
+        monkeypatch.setattr("atexit.register", lambda *a, **k: None)
         monkeypatch.delenv("CF_TEXT_VLLM_PYTHON", raising=False)
         sup = VllmSubprocessSupervisor("IFM/K2-Horizon-7B", port=8300)
         with pytest.raises(RuntimeError, match="CF_TEXT_VLLM_PYTHON"):
