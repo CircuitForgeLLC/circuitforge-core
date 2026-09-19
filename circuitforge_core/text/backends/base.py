@@ -253,6 +253,11 @@ def make_text_backend(
 
     if resolved == "vllm":
         from circuitforge_core.text.backends.vllm import VllmBackend
+        if not os.environ.get("CF_TEXT_VLLM_URL"):
+            from circuitforge_core.text.backends.vllm_subprocess import VllmSubprocessSupervisor
+            model_id = model_path.removeprefix("vllm://")
+            supervisor = VllmSubprocessSupervisor(model_id)
+            os.environ["CF_TEXT_VLLM_URL"] = supervisor.ensure_running()
         return VllmBackend(model_path=model_path)
 
     raise ValueError(
