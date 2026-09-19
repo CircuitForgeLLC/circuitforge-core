@@ -55,10 +55,12 @@ class TestVllmSubprocessSupervisorSpawn:
         assert args[args.index("--gpu-memory-utilization") + 1] == "0.85"
         assert args[args.index("--dtype") + 1] == "bfloat16"
 
-    def test_always_targets_cuda_device_0(self, monkeypatch):
-        """The child process always sees its assigned GPU as cuda:0 -- cf-orch
-        already narrows visibility via CUDA_VISIBLE_DEVICES on cf-text's own
-        process before this supervisor ever runs."""
+    def test_does_not_pass_a_device_flag(self, monkeypatch):
+        """vllm's api_server has no --device flag (confirmed against the
+        installed vllm 0.19.1: passing one is a hard argparse error). GPU
+        targeting relies entirely on CUDA_VISIBLE_DEVICES, which cf-orch
+        already narrows on cf-text's own process before this supervisor
+        ever runs, and which subprocess.Popen inherits by default."""
         monkeypatch.setattr("atexit.register", lambda *a, **k: None)
         monkeypatch.setenv("CF_TEXT_VLLM_PYTHON", "/devl/miniconda3/envs/cf-vllm/bin/python")
         with patch("subprocess.Popen") as mock_popen, \
@@ -66,7 +68,10 @@ class TestVllmSubprocessSupervisorSpawn:
             sup = VllmSubprocessSupervisor("IFM/K2-Horizon-7B", port=8300)
             sup.ensure_running()
         args = mock_popen.call_args.args[0]
-        assert args[args.index("--device") + 1] == "cuda:0"
+        assert "--device" not in args
+        # No env= kwarg passed to Popen means the child inherits the parent's
+        # environment (including CUDA_VISIBLE_DEVICES) unmodified.
+        assert "env" not in mock_popen.call_args.kwargs
 
     def test_missing_python_path_raises(self, monkeypatch):
         monkeypatch.setattr("atexit.register", lambda *a, **k: None)

@@ -83,11 +83,12 @@ class VllmSubprocessSupervisor:
             "--port", str(self._port),
             "--gpu-memory-utilization", str(self._gpu_memory_utilization),
             "--dtype", self._dtype,
-            # cf-orch already narrows CUDA_VISIBLE_DEVICES on cf-text's own
-            # process before this ever runs, so the assigned GPU is always
-            # device 0 from here.
-            "--device", "cuda:0",
         ]
+        # cf-orch already narrows CUDA_VISIBLE_DEVICES on cf-text's own process
+        # before this ever runs, and the child inherits it via subprocess.Popen
+        # by default -- vllm's api_server has no --device flag to pass instead
+        # (confirmed against the installed vllm 0.19.1: passing one is a hard
+        # argparse error, "unrecognized arguments: --device").
         self._proc = subprocess.Popen(args)
         # Orphaned child processes are how cf-orch#112 happened (a coordinator
         # process squatted on a port for a month because nothing ever cleaned
