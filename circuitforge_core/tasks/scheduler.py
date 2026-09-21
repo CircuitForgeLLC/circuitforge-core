@@ -31,6 +31,7 @@ class TaskSpec(NamedTuple):
     id: int
     job_id: int
     params: Optional[str]
+    db_path: Path
 
 
 _DEFAULT_MAX_QUEUE_DEPTH = 500
@@ -53,7 +54,7 @@ class TaskScheduler(Protocol):
     implement this interface so products can inject either without API changes.
     """
 
-    def enqueue(self, task_id: int, task_type: str, job_id: int, params: Optional[str]) -> bool:
+    def enqueue(self, task_id: int, task_type: str, job_id: int, params: Optional[str], db_path: Path) -> bool:
         """Add a task to the queue. Returns True if enqueued, False if queue full."""
         ...
 
@@ -80,12 +81,12 @@ class LocalScheduler:
             task_types=frozenset({"cover_letter", "research"}),
             vram_budgets={"cover_letter": 2.5, "research": 5.0},
         )
-        enqueued = sched.enqueue(task_id, "cover_letter", job_id, params_json)
+        enqueued = sched.enqueue(task_id, "cover_letter", job_id, params_json, db_path)
     """
 
     def __init__(
         self,
-        db_path: Path,
+        db_path: Optional[Path],
         run_task_fn: RunTaskFn,
         task_types: frozenset[str],
         vram_budgets: dict[str, float],
@@ -104,9 +105,10 @@ class LocalScheduler:
         self._active: dict[str, threading.Thread] = {}
         self._thread: Optional[threading.Thread] = None
 
-        self._load_queued_tasks()
+        if self._db_path is not None:
+            self._load_queued_tasks()
 
-    def enqueue(self, task_id: int, task_type: str, job_id: int, params: Optional[str]) -> bool:
+    def enqueue(self, task_id: int, task_type: str, job_id: int, params: Optional[str], db_path: Path) -> bool:
         with self._lock:
             q = self._queues.setdefault(task_type, deque())
             if len(q) >= self._max_queue_depth:
@@ -115,7 +117,7 @@ class LocalScheduler:
                     task_type, self._max_queue_depth, task_id,
                 )
                 return False
-            q.append(TaskSpec(task_id, job_id, params))
+            q.append(TaskSpec(task_id, job_id, params, db_path))
         self._wake.set()
         return True
 
@@ -170,7 +172,7 @@ class LocalScheduler:
                         break
                     task = q.popleft()
                 try:
-                    self._run_task(self._db_path, task.id, task_type, task.job_id, task.params)
+                    self._run_task(task.db_path, task.id, task_type, task.job_id, task.params)
                 except Exception as exc:
                     # run_task_fn should handle its own exceptions. If it leaks one,
                     # log it so the task doesn't silently stay 'queued' with no trace.
@@ -200,7 +202,7 @@ class LocalScheduler:
             rows = []
         for row_id, task_type, job_id, params in rows:
             q = self._queues.setdefault(task_type, deque())
-            q.append(TaskSpec(row_id, job_id, params))
+            q.append(TaskSpec(row_id, job_id, params, self._db_path))
         if rows:
             logger.info("Scheduler: resumed %d queued task(s) from prior run", len(rows))
 
@@ -222,8 +224,12 @@ def get_scheduler(
 ) -> LocalScheduler:
     """Return the process-level LocalScheduler singleton.
 
-    ``run_task_fn``, ``task_types``, ``vram_budgets``, and ``db_path`` are
-    required on the first call; ignored on subsequent calls.
+    ``run_task_fn``, ``task_types``, and ``vram_budgets`` are required on the
+    first call; ignored on subsequent calls. ``db_path`` is optional and, when
+    given, is only used to resume queued tasks from a prior process run
+    (single-tenant/self-hosted installs) -- pass ``None`` for multi-tenant
+    cloud deployments where each task supplies its own db_path via
+    ``enqueue()``.
 
     ``coordinator_url`` and ``service_name`` are accepted but ignored —
     LocalScheduler has no coordinator. They exist for API compatibility with
@@ -232,9 +238,9 @@ def get_scheduler(
     global _scheduler
     if _scheduler is not None:
         return _scheduler
-    if run_task_fn is None or task_types is None or vram_budgets is None or db_path is None:
+    if run_task_fn is None or task_types is None or vram_budgets is None:
         raise ValueError(
-            "db_path, run_task_fn, task_types, and vram_budgets are required "
+            "run_task_fn, task_types, and vram_budgets are required "
             "on the first call to get_scheduler()"
         )
     candidate = LocalScheduler(
