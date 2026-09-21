@@ -10,6 +10,7 @@ import pytest
 from circuitforge_core.tasks.scheduler import (
     LocalScheduler,
     TaskScheduler,
+    TaskSpec,
     detect_available_vram_gb,
     get_scheduler,
     reset_scheduler,
@@ -58,7 +59,7 @@ def test_enqueue_and_execute(db_path):
         vram_budgets={"cover_letter": 0.0},
     )
     sched.start()
-    sched.enqueue(1, "cover_letter", 1, None)
+    sched.enqueue(1, "cover_letter", 1, None, db_path)
     time.sleep(0.3)
     sched.shutdown()
     assert ("cover_letter", 1) in results
@@ -73,9 +74,9 @@ def test_fifo_ordering(db_path):
         vram_budgets={"t": 0.0},
     )
     sched.start()
-    sched.enqueue(1, "t", 1, None)
-    sched.enqueue(2, "t", 1, None)
-    sched.enqueue(3, "t", 1, None)
+    sched.enqueue(1, "t", 1, None, db_path)
+    sched.enqueue(2, "t", 1, None, db_path)
+    sched.enqueue(3, "t", 1, None, db_path)
     time.sleep(0.5)
     sched.shutdown()
     assert [r[1] for r in results] == [1, 2, 3]
@@ -89,9 +90,9 @@ def test_queue_depth_limit(db_path):
         vram_budgets={"t": 0.0},
         max_queue_depth=2,
     )
-    assert sched.enqueue(1, "t", 1, None) is True
-    assert sched.enqueue(2, "t", 1, None) is True
-    assert sched.enqueue(3, "t", 1, None) is False
+    assert sched.enqueue(1, "t", 1, None, db_path) is True
+    assert sched.enqueue(2, "t", 1, None, db_path) is True
+    assert sched.enqueue(3, "t", 1, None, db_path) is False
 
 
 def test_get_scheduler_singleton(db_path):
@@ -138,3 +139,71 @@ def test_load_queued_tasks_on_startup(db_path):
     time.sleep(0.3)
     sched.shutdown()
     assert ("t", 99) in results
+
+
+def test_task_spec_has_db_path_field():
+    spec = TaskSpec(id=1, job_id=2, params=None, db_path=Path("/tmp/a.db"))
+    assert spec.db_path == Path("/tmp/a.db")
+
+
+def test_two_tasks_with_different_db_paths_each_run_against_their_own(tmp_path):
+    """The core bug this fix exists for: two tasks enqueued with different
+    db_path values must each be processed with THEIR OWN db_path, not the
+    scheduler's construction-time db_path."""
+    seen_db_paths = []
+    done = __import__("threading").Event()
+    lock = __import__("threading").Lock()
+
+    def fake_run_task(db_path, task_id, task_type, job_id, params):
+        with lock:
+            seen_db_paths.append(db_path)
+            if len(seen_db_paths) == 2:
+                done.set()
+
+    db_a = tmp_path / "tenant-a.db"
+    db_b = tmp_path / "tenant-b.db"
+
+    sched = LocalScheduler(
+        db_path=None,
+        run_task_fn=fake_run_task,
+        task_types=frozenset({"cover_letter"}),
+        vram_budgets={"cover_letter": 1.0},
+    )
+    sched.start()
+    try:
+        sched.enqueue(1, "cover_letter", 100, None, db_a)
+        sched.enqueue(2, "cover_letter", 200, None, db_b)
+        assert done.wait(timeout=5), "tasks did not complete in time"
+    finally:
+        sched.shutdown()
+
+    assert db_a in seen_db_paths
+    assert db_b in seen_db_paths
+    assert len(seen_db_paths) == 2
+
+
+def test_local_scheduler_db_path_none_skips_resume_scan(tmp_path):
+    """db_path=None at construction must not raise and must not attempt to
+    scan any database for queued tasks to resume."""
+    sched = LocalScheduler(
+        db_path=None,
+        run_task_fn=lambda *a: None,
+        task_types=frozenset({"cover_letter"}),
+        vram_budgets={"cover_letter": 1.0},
+    )
+    assert sched._queues == {}
+
+
+def test_get_scheduler_no_longer_requires_db_path():
+    """get_scheduler() must not raise ValueError for a missing db_path on
+    first call -- only run_task_fn/task_types/vram_budgets remain required."""
+    reset_scheduler()
+    try:
+        sched = get_scheduler(
+            run_task_fn=lambda *a: None,
+            task_types=frozenset({"cover_letter"}),
+            vram_budgets={"cover_letter": 1.0},
+        )
+        assert sched is not None
+    finally:
+        reset_scheduler()
