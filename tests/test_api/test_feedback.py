@@ -155,6 +155,52 @@ def test_post_success_returns_issue_number_and_url(monkeypatch):
     assert issue_call_kwargs[0]["json"]["labels"] == [99, 99, 99]
 
 
+def test_post_default_forgejo_url_is_current_domain_when_env_unset(monkeypatch):
+    """When FORGEJO_API_URL is not set, the default must point at the live
+    Forgejo domain (git.circuitforge.tech), not the retired
+    git.opensourcesolarpunk.com, which 410s. Every other test in this file
+    explicitly sets FORGEJO_API_URL, so none of them would have caught a
+    regression to a stale default -- this test exercises that default
+    directly. Regression test for a live bug found during Peregrine's
+    v1.0.0 RC1 cloud verification (2026-09-20): real feedback submissions
+    were failing in production on both cloud and self-hosted installs that
+    never set this env var, since it always fell through to the dead
+    domain."""
+    monkeypatch.setenv("FORGEJO_API_TOKEN", "test-token-abc")
+    monkeypatch.delenv("DEMO_MODE", raising=False)
+    monkeypatch.delenv("FORGEJO_API_URL", raising=False)
+
+    mock_get = _mock_forgejo_get()
+    mock_post_label = MagicMock(ok=True)
+    mock_post_label.json.return_value = {"id": 99, "name": "beta-feedback"}
+    mock_post_issue = _mock_forgejo_post_issue(number=7, url="https://git.circuitforge.tech/Circuit-Forge/test/issues/7")
+
+    requested_urls: list[str] = []
+
+    def get_side_effect(url, **kwargs):
+        requested_urls.append(url)
+        return mock_get
+
+    def post_side_effect(url, **kwargs):
+        requested_urls.append(url)
+        if "/labels" in url:
+            return mock_post_label
+        return mock_post_issue
+
+    client = _make_client()
+    with patch("circuitforge_core.api.feedback.requests.get", side_effect=get_side_effect), \
+         patch("circuitforge_core.api.feedback.requests.post", side_effect=post_side_effect):
+        resp = client.post("/feedback", json=_VALID_PAYLOAD)
+
+    assert resp.status_code == 200
+    assert requested_urls, "No HTTP calls were made"
+    for url in requested_urls:
+        assert url.startswith("https://git.circuitforge.tech/api/v1"), (
+            f"Expected the current Forgejo domain, got: {url}"
+        )
+        assert "opensourcesolarpunk" not in url
+
+
 def test_post_returns_502_on_label_creation_failure(monkeypatch):
     """POST / returns 502 when Forgejo label creation fails."""
     monkeypatch.setenv("FORGEJO_API_TOKEN", "test-token")
