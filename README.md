@@ -4,7 +4,7 @@
 
 <h1 align="center">circuitforge-core</h1>
 
-<p align="center">Shared Python scaffold for privacy-first, self-hosted AI tools</p>
+<p align="center">Shared Python scaffold for privacy-first, self-hosted LLM tools</p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="MIT License" /></a>
@@ -205,7 +205,7 @@ Open issues and PRs at: [git.opensourcesolarpunk.com/Circuit-Forge/circuitforge-
 
 MIT — see [LICENSE](LICENSE).
 
-This is the fully open layer of the CircuitForge stack. Products built on top of circuitforge-core may carry different licenses (BSL 1.1 for AI features, proprietary for fine-tuned weights). The scaffold itself is and will remain MIT.
+This is the fully open layer of the CircuitForge stack. Products built on top of circuitforge-core may carry different licenses (BSL 1.1 for LLM features, proprietary for fine-tuned weights). The scaffold itself is and will remain MIT.
 
 ---
 
