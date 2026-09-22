@@ -156,7 +156,7 @@ def make_feedback_router(
             raise HTTPException(status_code=403, detail="Feedback disabled in demo mode.")
 
         base = os.environ.get(
-            "FORGEJO_API_URL", "https://git.opensourcesolarpunk.com/api/v1"
+            "FORGEJO_API_URL", "https://git.circuitforge.tech/api/v1"
         )
         context = _collect_context(payload.tab, product)
         body = _build_issue_body(payload, context)
